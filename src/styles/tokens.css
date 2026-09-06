@@ -1,0 +1,77 @@
+@theme {
+  /* ─── Brand — teal, not blue or purple ─────────────────────────── */
+  --color-brand-50:  #f0fdfa;
+  --color-brand-100: #ccfbf1;
+  --color-brand-200: #99f6e4;
+  --color-brand-300: #5eead4;
+  --color-brand-400: #2dd4bf;
+  --color-brand-500: #14b8a6;
+  --color-brand-600: #0d9488;
+  --color-brand-700: #0f766e;
+  --color-brand-800: #115e59;
+  --color-brand-900: #134e4a;
+  --color-brand-950: #042f2e;
+
+  /* ─── Surface — slate neutrals ──────────────────────────────────── */
+  --color-surface-0:   #ffffff;
+  --color-surface-50:  #f8fafc;
+  --color-surface-100: #f1f5f9;
+  --color-surface-200: #e2e8f0;
+  --color-surface-300: #cbd5e1;
+  --color-surface-400: #94a3b8;
+  --color-surface-500: #64748b;
+  --color-surface-600: #475569;
+  --color-surface-700: #334155;
+  --color-surface-800: #1e293b;
+  --color-surface-900: #0f172a;
+
+  /* ─── Semantic status ────────────────────────────────────────────── */
+  --color-success:       #10b981;
+  --color-success-light: #d1fae5;
+  --color-success-dark:  #065f46;
+
+  --color-warning:       #f59e0b;
+  --color-warning-light: #fef3c7;
+  --color-warning-dark:  #92400e;
+
+  --color-danger:        #f43f5e;
+  --color-danger-light:  #ffe4e6;
+  --color-danger-dark:   #9f1239;
+
+  /* ─── Type scale (4px rhythm) ────────────────────────────────────── */
+  --font-size-2xs:  0.625rem;   /* 10px */
+  --font-size-xs:   0.75rem;    /* 12px */
+  --font-size-sm:   0.875rem;   /* 14px */
+  --font-size-base: 1rem;       /* 16px */
+  --font-size-lg:   1.125rem;   /* 18px */
+  --font-size-xl:   1.25rem;    /* 20px */
+  --font-size-2xl:  1.5rem;     /* 24px */
+  --font-size-3xl:  1.875rem;   /* 30px */
+  --font-size-4xl:  2.25rem;    /* 36px */
+  --font-size-5xl:  3rem;       /* 48px */
+
+  /* ─── Spacing (4px base unit) ────────────────────────────────────── */
+  --spacing-px:  1px;
+  --spacing-0:   0px;
+  --spacing-1:   0.25rem;   /*  4px */
+  --spacing-2:   0.5rem;    /*  8px */
+  --spacing-3:   0.75rem;   /* 12px */
+  --spacing-4:   1rem;      /* 16px */
+  --spacing-5:   1.25rem;   /* 20px */
+  --spacing-6:   1.5rem;    /* 24px */
+  --spacing-8:   2rem;      /* 32px */
+  --spacing-10:  2.5rem;    /* 40px */
+  --spacing-12:  3rem;      /* 48px */
+  --spacing-16:  4rem;      /* 64px */
+  --spacing-20:  5rem;      /* 80px */
+  --spacing-24:  6rem;      /* 96px */
+  --spacing-32:  8rem;      /* 128px */
+
+  /* ─── Border radius — slightly rounded, stays flat ──────────────── */
+  --radius-none: 0px;
+  --radius-sm:   0.125rem;  /*  2px */
+  --radius:      0.25rem;   /*  4px */
+  --radius-md:   0.375rem;  /*  6px */
+  --radius-lg:   0.5rem;    /*  8px */
+  --radius-full: 9999px;
+}
