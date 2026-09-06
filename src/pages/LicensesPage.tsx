@@ -1,6 +1,6 @@
 import { Fragment, useEffect, useMemo, useState, type FormEvent } from 'react'
 import { client } from '../api'
-import type { AppData, Contract, ContractLicense, Vendor } from '../types'
+import type { Contract, ContractLicense, Vendor } from '../types'
 import '../styles/contracts.css'
 import { downloadExcel } from '../utils/exportExcel'
 
@@ -54,11 +54,15 @@ export default function LicensesPage() {
   const [licensePage, setLicensePage] = useState(0)
 
   useEffect(() => {
-    client.get<AppData>('/app-data')
-      .then(({ data }) => {
-        setLicenses(data.licenses ?? [])
-        setVendors(data.vendors ?? [])
-        setContracts(data.contracts ?? [])
+    Promise.all([
+      client.get<ContractLicense[]>('/contracts/licenses/all'),
+      client.get<{ content: Vendor[] }>('/vendors', { params: { page: 0, size: 500 } }),
+      client.get<{ content: Contract[] }>('/contracts', { params: { page: 0, size: 500 } }),
+    ])
+      .then(([licenseResponse, vendorResponse, contractResponse]) => {
+        setLicenses(licenseResponse.data ?? [])
+        setVendors(vendorResponse.data.content ?? [])
+        setContracts(contractResponse.data.content ?? [])
       })
       .catch(() => setError('Failed to load licenses.'))
       .finally(() => setLoading(false))

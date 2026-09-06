@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { client } from '../api'
-import type { AppData, Contract, ContractLicense, Vendor } from '../types'
+import type { Contract, ContractLicense, Vendor } from '../types'
 import '../styles/contracts.css'
 
 function money(value: number | null) {
@@ -19,11 +19,15 @@ export default function DashboardPage() {
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
-    client.get<AppData>('/app-data')
-      .then(({ data }) => {
-        setContracts(data.contracts ?? [])
-        setLicenses(data.licenses ?? [])
-        setVendors(data.vendors ?? [])
+    Promise.all([
+      client.get<{ content: Contract[] }>('/contracts', { params: { page: 0, size: 500 } }),
+      client.get<ContractLicense[]>('/contracts/licenses/all'),
+      client.get<{ content: Vendor[] }>('/vendors', { params: { page: 0, size: 500 } }),
+    ])
+      .then(([contractResponse, licenseResponse, vendorResponse]) => {
+        setContracts(contractResponse.data.content ?? [])
+        setLicenses(licenseResponse.data ?? [])
+        setVendors(vendorResponse.data.content ?? [])
       })
       .catch(() => setError('Failed to load dashboard data.'))
   }, [])

@@ -1,7 +1,7 @@
 import { Fragment, useEffect, useMemo, useState, type FormEvent } from 'react'
 import { client } from '../api'
 import { ToolbarDropdown } from '../components'
-import type { AppData, Contract, ContractLicense, Vendor } from '../types'
+import type { Contract, ContractLicense, Vendor } from '../types'
 import '../styles/contracts.css'
 import { downloadExcel } from '../utils/exportExcel'
 
@@ -104,11 +104,15 @@ export default function VendorsPage() {
     setLoading(true)
     setError(null)
 
-    client.get<AppData>('/app-data')
-      .then(({ data }) => {
-        setVendors(data.vendors ?? [])
-        setContracts(data.contracts ?? [])
-        setLicenses(data.licenses ?? [])
+    Promise.all([
+      client.get<{ content: Vendor[] }>('/vendors', { params: { page: 0, size: 500 } }),
+      client.get<{ content: Contract[] }>('/contracts', { params: { page: 0, size: 500 } }),
+      client.get<ContractLicense[]>('/contracts/licenses/all'),
+    ])
+      .then(([vendorResponse, contractResponse, licenseResponse]) => {
+        setVendors(vendorResponse.data.content ?? [])
+        setContracts(contractResponse.data.content ?? [])
+        setLicenses(licenseResponse.data ?? [])
       })
       .catch(() => setError('Failed to load vendors or contracts.'))
       .finally(() => setLoading(false))

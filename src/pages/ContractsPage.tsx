@@ -1,7 +1,7 @@
 import { Fragment, useEffect, useMemo, useState, type FormEvent } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { client } from '../api'
-import type { AppData, Contract, ContractLicense, SpringPage, Vendor } from '../types'
+import type { Contract, ContractLicense, SpringPage, Vendor } from '../types'
 import '../styles/contracts.css'
 import { downloadExcel } from '../utils/exportExcel'
 
@@ -436,8 +436,7 @@ export default function ContractsPage() {
   const total = visibleContracts.reduce((sum, c) => sum + (c.value ?? 0), 0)
 
   async function exportContracts() {
-    const { data: all } = await client.get<AppData>('/app-data')
-    downloadExcel('contracts.xlsx', 'Contracts', all.contracts.map(contract => ({
+    downloadExcel('contracts.xlsx', 'Contracts', visibleContracts.map(contract => ({
       'Contract #': contract.contractNumber,
       Vendor: contract.vendorName ?? contract.vendor?.name ?? '',
       'Vendor JDE': contract.vendorJDENumber ?? contract.vendor?.vendorJDENumber ?? '',
