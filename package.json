@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
+    "build:aws": "VITE_API_BASE_URL=https://r5mtag8nbi.us-east-2.awsapprunner.com npm run build",
     "lint": "oxlint",
     "preview": "vite preview"
   },
