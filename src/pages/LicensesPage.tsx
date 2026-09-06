@@ -54,17 +54,21 @@ export default function LicensesPage() {
   const [licensePage, setLicensePage] = useState(0)
 
   useEffect(() => {
-    Promise.all([
+    Promise.allSettled([
       client.get<ContractLicense[]>('/contracts/licenses/all'),
       client.get<{ content: Vendor[] }>('/vendors', { params: { page: 0, size: 500 } }),
       client.get<{ content: Contract[] }>('/contracts', { params: { page: 0, size: 500 } }),
     ])
-      .then(([licenseResponse, vendorResponse, contractResponse]) => {
-        setLicenses(licenseResponse.data ?? [])
-        setVendors(vendorResponse.data.content ?? [])
-        setContracts(contractResponse.data.content ?? [])
+      .then(([licenseResult, vendorResult, contractResult]) => {
+        const failures: string[] = []
+        if (licenseResult.status === 'fulfilled') setLicenses(licenseResult.value.data ?? [])
+        else failures.push('licenses')
+        if (vendorResult.status === 'fulfilled') setVendors(vendorResult.value.data.content ?? [])
+        else failures.push('vendors')
+        if (contractResult.status === 'fulfilled') setContracts(contractResult.value.data.content ?? [])
+        else failures.push('contracts')
+        if (failures.length) setError(`Failed to load ${failures.join(', ')}.`)
       })
-      .catch(() => setError('Failed to load licenses.'))
       .finally(() => setLoading(false))
   }, [])
 

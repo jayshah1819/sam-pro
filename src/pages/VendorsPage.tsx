@@ -104,17 +104,21 @@ export default function VendorsPage() {
     setLoading(true)
     setError(null)
 
-    Promise.all([
+    Promise.allSettled([
       client.get<{ content: Vendor[] }>('/vendors', { params: { page: 0, size: 500 } }),
       client.get<{ content: Contract[] }>('/contracts', { params: { page: 0, size: 500 } }),
       client.get<ContractLicense[]>('/contracts/licenses/all'),
     ])
-      .then(([vendorResponse, contractResponse, licenseResponse]) => {
-        setVendors(vendorResponse.data.content ?? [])
-        setContracts(contractResponse.data.content ?? [])
-        setLicenses(licenseResponse.data ?? [])
+      .then(([vendorResult, contractResult, licenseResult]) => {
+        const failures: string[] = []
+        if (vendorResult.status === 'fulfilled') setVendors(vendorResult.value.data.content ?? [])
+        else failures.push('vendors')
+        if (contractResult.status === 'fulfilled') setContracts(contractResult.value.data.content ?? [])
+        else failures.push('contracts')
+        if (licenseResult.status === 'fulfilled') setLicenses(licenseResult.value.data ?? [])
+        else failures.push('licenses')
+        if (failures.length) setError(`Failed to load ${failures.join(', ')}.`)
       })
-      .catch(() => setError('Failed to load vendors or contracts.'))
       .finally(() => setLoading(false))
   }, [])
 

@@ -19,17 +19,21 @@ export default function DashboardPage() {
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
-    Promise.all([
+    Promise.allSettled([
       client.get<{ content: Contract[] }>('/contracts', { params: { page: 0, size: 500 } }),
       client.get<ContractLicense[]>('/contracts/licenses/all'),
       client.get<{ content: Vendor[] }>('/vendors', { params: { page: 0, size: 500 } }),
     ])
-      .then(([contractResponse, licenseResponse, vendorResponse]) => {
-        setContracts(contractResponse.data.content ?? [])
-        setLicenses(licenseResponse.data ?? [])
-        setVendors(vendorResponse.data.content ?? [])
+      .then(([contractResult, licenseResult, vendorResult]) => {
+        const failures: string[] = []
+        if (contractResult.status === 'fulfilled') setContracts(contractResult.value.data.content ?? [])
+        else failures.push('contracts')
+        if (licenseResult.status === 'fulfilled') setLicenses(licenseResult.value.data ?? [])
+        else failures.push('licenses')
+        if (vendorResult.status === 'fulfilled') setVendors(vendorResult.value.data.content ?? [])
+        else failures.push('vendors')
+        if (failures.length) setError(`Failed to load ${failures.join(', ')}.`)
       })
-      .catch(() => setError('Failed to load dashboard data.'))
   }, [])
 
   const cutoff = new Date()
