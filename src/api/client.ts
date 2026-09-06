@@ -1,5 +1,5 @@
 import axios from 'axios'
-import { getToken } from './tokenStore'
+import { clearToken, getToken } from './tokenStore'
 
 function normalizeTenantIdKey<T>(value: T): T {
   if (Array.isArray(value)) {
@@ -58,6 +58,7 @@ client.interceptors.response.use(
       !isLoginRoute &&
       !isRegisterRoute
     ) {
+      clearToken()
       window.location.href = '/login'
     }
     return Promise.reject(error)

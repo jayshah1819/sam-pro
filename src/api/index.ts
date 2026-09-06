@@ -1,2 +1,2 @@
 export { default as client } from './client'
-export { getToken, setToken } from './tokenStore'
+export { clearToken, getToken, setToken } from './tokenStore'
