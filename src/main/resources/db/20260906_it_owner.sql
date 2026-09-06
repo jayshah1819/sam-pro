@@ -1,0 +1,2 @@
+ALTER TABLE contracts ADD COLUMN it_owner VARCHAR(255) NULL;
+ALTER TABLE entitlements ADD COLUMN it_owner VARCHAR(255) NULL;

@@ -1,0 +1,3 @@
+ALTER TABLE vendors ADD COLUMN comments TEXT NULL;
+ALTER TABLE contracts ADD COLUMN comments TEXT NULL;
+ALTER TABLE entitlements ADD COLUMN comments TEXT NULL;
