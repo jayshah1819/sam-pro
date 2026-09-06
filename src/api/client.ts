@@ -31,6 +31,7 @@ client.interceptors.request.use(config => {
   const isPublicAuthRoute = requestUrl === '/auth/login' || requestUrl === '/auth/register'
   if (token && !isPublicAuthRoute) {
     config.headers.Authorization = `Bearer ${token}`
+    config.headers['X-SAM-Tracker-Token'] = token
   }
   return config
 })
