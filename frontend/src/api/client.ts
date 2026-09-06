@@ -27,7 +27,9 @@ const client = axios.create({
 
 client.interceptors.request.use(config => {
   const token = getToken()
-  if (token) {
+  const requestUrl = String(config.url || '')
+  const isPublicAuthRoute = requestUrl === '/auth/login' || requestUrl === '/auth/register'
+  if (token && !isPublicAuthRoute) {
     config.headers.Authorization = `Bearer ${token}`
   }
   return config
@@ -45,6 +47,7 @@ client.interceptors.response.use(
       requestUrl.includes('/contracts/imported')
     const isDashboardRoute = requestUrl.includes('/dashboards/me')
     const isLoginRoute = requestUrl.includes('/auth/login')
+    const isRegisterRoute = requestUrl.includes('/auth/register')
 
     // skip redirect when the login endpoint itself returns 401
     if (
@@ -52,7 +55,8 @@ client.interceptors.response.use(
       window.location.pathname !== '/login' &&
       !isImportedDataRoute &&
       !isDashboardRoute &&
-      !isLoginRoute
+      !isLoginRoute &&
+      !isRegisterRoute
     ) {
       window.location.href = '/login'
     }
