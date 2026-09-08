@@ -67,6 +67,8 @@
 .dashboard-license-chart { display: flex; flex-direction: column; gap: 12px; margin-top: 16px; }
 .dashboard-license-axis { display: flex; justify-content: space-between; margin-left: 145px; color: var(--contracts-soft); font-size: 11px; padding: 0 2px; }
 .dashboard-license-line-row { display: grid; grid-template-columns: 135px minmax(0, 1fr); align-items: center; gap: 10px; }
+.dashboard-license-line-row-clickable { width: 100%; background: none; border: none; padding: 4px 0; cursor: pointer; text-align: left; }
+.dashboard-license-line-row-clickable:hover .dashboard-license-line-label { text-decoration: underline; }
 .dashboard-license-line-label { overflow: hidden; color: var(--contracts-ink); font-size: 12px; font-weight: 600; text-overflow: ellipsis; white-space: nowrap; }
 .dashboard-license-line-track { position: relative; height: 18px; background: repeating-linear-gradient(to right, transparent 0, transparent calc(25% - 1px), #d8d5cc calc(25% - 1px), #d8d5cc 25%); }
 .dashboard-license-line { position: relative; display: block; top: 8px; height: 3px; min-width: 10px; border-radius: 99px; }

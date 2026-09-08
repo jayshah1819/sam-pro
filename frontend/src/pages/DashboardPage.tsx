@@ -16,6 +16,7 @@ export default function DashboardPage() {
   const [renewingContractId, setRenewingContractId] = useState<number | null>(null)
   const [renewalContractCandidate, setRenewalContractCandidate] = useState<Contract | null>(null)
   const [renewalCandidate, setRenewalCandidate] = useState<ContractLicense | null>(null)
+  const [seatDetailName, setSeatDetailName] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
@@ -149,14 +150,49 @@ export default function DashboardPage() {
               {[0, 1, 2, 3, 4].map(index => <span key={index}>{index * chartStep}</span>)}
             </div>
             {seatTotals.map(([name, seats], index) => (
-              <div className="dashboard-license-line-row" key={name}>
+              <button
+                type="button"
+                className="dashboard-license-line-row dashboard-license-line-row-clickable"
+                key={name}
+                onClick={() => setSeatDetailName(name)}
+              >
                 <span className="dashboard-license-line-label" title={name}>{name}</span>
                 <div className="dashboard-license-line-track"><span className={`dashboard-license-line dashboard-line-color-${index % 6}`} style={{ width: `${Math.max((seats / chartMax) * 100, 2)}%` }}><b>{seats}</b></span></div>
-              </div>
+              </button>
             ))}
           </div>
         </>}
       </section>
+
+      {seatDetailName && (() => {
+        const matches = licenses.filter(license => license.licenseName === seatDetailName)
+        const totalSeats = matches.reduce((sum, license) => sum + (license.seatsPurchased ?? 0), 0)
+        return (
+          <div className="contracts-modal-overlay" role="dialog" aria-modal="true" aria-labelledby="seat-detail-title">
+            <div className="contracts-modal">
+              <div className="contracts-modal-head">
+                <div><p className="vendor-edit-kicker">SEATS BY LICENSE</p><h2 id="seat-detail-title">{seatDetailName}</h2></div>
+                <button type="button" className="contracts-modal-close" onClick={() => setSeatDetailName(null)} aria-label="Close">×</button>
+              </div>
+              <div className="contracts-modal-body">
+                <p className="dashboard-empty">{totalSeats} total seats across {matches.length} contract{matches.length === 1 ? '' : 's'}</p>
+                {matches.map(license => {
+                  const contract = contracts.find(item => item.id === license.contractId)
+                  return (
+                    <div className="dashboard-alert-row" key={license.licenseId}>
+                      <span>
+                        <b>{contract?.contractNumber ?? 'No contract'}</b>
+                        <small>{license.vendorName} · {license.startDate} → {license.expiryDate}</small>
+                      </span>
+                      <strong>{license.seatsPurchased ?? 0} seats</strong>
+                    </div>
+                  )
+                })}
+              </div>
+            </div>
+          </div>
+        )
+      })()}
     </div>
   )
 }
