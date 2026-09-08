@@ -2,6 +2,7 @@ package com.samtracker.security;
 
 import com.samtracker.auth.Credential;
 import com.samtracker.auth.CredentialRepository;
+import com.samtracker.auth.SessionActivityService;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
@@ -26,10 +27,13 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
     private final JwtService jwtService;
     private final CredentialRepository credentialRepository;
+    private final SessionActivityService sessionActivityService;
 
-    public JwtAuthenticationFilter(JwtService jwtService, CredentialRepository credentialRepository) {
+    public JwtAuthenticationFilter(JwtService jwtService, CredentialRepository credentialRepository,
+            SessionActivityService sessionActivityService) {
         this.jwtService = jwtService;
         this.credentialRepository = credentialRepository;
+        this.sessionActivityService = sessionActivityService;
     }
 
     @Override
@@ -75,6 +79,7 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
                     List.of(new SimpleGrantedAuthority("ROLE_" + role)));
             auth.setDetails(new WebAuthenticationDetailsSource().buildDetails(request));
             SecurityContextHolder.getContext().setAuthentication(auth);
+            sessionActivityService.recordActivity(subject);
         }
 
         chain.doFilter(request, response);

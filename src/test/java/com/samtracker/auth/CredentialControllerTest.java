@@ -1,15 +1,19 @@
 package com.samtracker.auth;
 
+import com.samtracker.common.EntityCodeService;
 import com.samtracker.tenant.TenantContext;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
+import org.mockito.Spy;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
+import org.springframework.security.crypto.password.PasswordEncoder;
 
 import java.time.Instant;
 import java.util.List;
@@ -23,6 +27,15 @@ class CredentialControllerTest {
 
     @Mock
     private CredentialRepository credentialRepository;
+
+    @Mock
+    private EntityCodeService entityCodeService;
+
+    @Spy
+    private PasswordEncoder passwordEncoder = new BCryptPasswordEncoder();
+
+    @Mock
+    private SessionActivityService sessionActivityService;
 
     @InjectMocks
     private CredentialController credentialController;

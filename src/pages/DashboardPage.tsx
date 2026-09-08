@@ -1,11 +1,29 @@
-import { useEffect, useState } from 'react'
+import { Fragment, useEffect, useState } from 'react'
 import { client } from '../api'
 import type { Contract, ContractLicense, Vendor } from '../types'
 import '../styles/contracts.css'
 
+interface SeatGroup {
+  key: string
+  vendorName: string
+  licenseName: string
+  totalSeats: number
+  licenses: ContractLicense[]
+}
+
 function money(value: number | null) {
   if (value == null) return '—'
   return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(value)
+}
+
+function expiryLabel(value: string) {
+  const parsed = new Date(`${value}T00:00:00`)
+  if (Number.isNaN(parsed.getTime())) return value
+  return parsed.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+}
+
+function asArray<T>(value: unknown): T[] {
+  return Array.isArray(value) ? value as T[] : []
 }
 
 export default function DashboardPage() {
@@ -16,6 +34,7 @@ export default function DashboardPage() {
   const [renewingContractId, setRenewingContractId] = useState<number | null>(null)
   const [renewalContractCandidate, setRenewalContractCandidate] = useState<Contract | null>(null)
   const [renewalCandidate, setRenewalCandidate] = useState<ContractLicense | null>(null)
+  const [expandedSeatKey, setExpandedSeatKey] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
@@ -26,11 +45,11 @@ export default function DashboardPage() {
     ])
       .then(([contractResult, licenseResult, vendorResult]) => {
         const failures: string[] = []
-        if (contractResult.status === 'fulfilled') setContracts(contractResult.value.data.content ?? [])
+        if (contractResult.status === 'fulfilled') setContracts(asArray<Contract>(contractResult.value.data.content))
         else failures.push('contracts')
-        if (licenseResult.status === 'fulfilled') setLicenses(licenseResult.value.data ?? [])
+        if (licenseResult.status === 'fulfilled') setLicenses(asArray<ContractLicense>(licenseResult.value.data))
         else failures.push('licenses')
-        if (vendorResult.status === 'fulfilled') setVendors(vendorResult.value.data.content ?? [])
+        if (vendorResult.status === 'fulfilled') setVendors(asArray<Vendor>(vendorResult.value.data.content))
         else failures.push('vendors')
         if (failures.length) setError(`Failed to load ${failures.join(', ')}.`)
       })
@@ -48,14 +67,31 @@ export default function DashboardPage() {
   const creditCardLicenses = licenses.filter(license => license.paymentMethod === 'CREDIT_CARD')
   const expiredLicenses = licenses.filter(license => license.expiryDate < today)
   const pendingLicenses = licenses.filter(license => license.status === 'PENDING')
-  const seatTotals = Array.from(licenses.reduce((totals, license) => {
-    const key = license.licenseName
-    totals.set(key, (totals.get(key) ?? 0) + (license.seatsPurchased ?? 0))
-    return totals
-  }, new Map<string, number>())).sort((a, b) => b[1] - a[1]).slice(0, 10)
-  const largestSeatTotal = Math.max(...seatTotals.map(([, seats]) => seats), 0)
+  const contractNumberById = new Map(contracts.map(contract => [String(contract.id), contract.contractNumber]))
+  // Same vendor + software + licence name rolls up into one seat total, however many contracts it spans
+  const seatGroups: SeatGroup[] = Array.from(licenses.reduce((groups, license) => {
+    const vendorName = (license.vendorName || 'Unknown vendor').trim()
+    const licenseName = (license.licenseName || license.softwareName || 'Unnamed').trim()
+    const softwareName = (license.softwareName || '').trim()
+    const key = `${vendorName.toLowerCase()}::${softwareName.toLowerCase()}::${licenseName.toLowerCase()}`
+    const existing = groups.get(key)
+    if (existing) {
+      existing.totalSeats += license.seatsPurchased ?? 0
+      existing.licenses.push(license)
+    } else {
+      groups.set(key, { key, vendorName, licenseName, totalSeats: license.seatsPurchased ?? 0, licenses: [license] })
+    }
+    return groups
+  }, new Map<string, SeatGroup>()).values())
+    .sort((a, b) => b.totalSeats - a.totalSeats)
+    .slice(0, 10)
+  const largestSeatTotal = Math.max(...seatGroups.map(group => group.totalSeats), 0)
   const chartStep = Math.max(10, Math.ceil((largestSeatTotal / 4) / 10) * 10)
   const chartMax = Math.max(chartStep * 4, 10)
+
+  function toggleSeatGroup(key: string) {
+    setExpandedSeatKey(previous => previous === key ? null : key)
+  }
 
   async function renewLicense(license: ContractLicense) {
     const vendor = vendors.find(option => option.name.toLowerCase() === license.vendorName.toLowerCase())
@@ -141,17 +177,45 @@ export default function DashboardPage() {
       </div>
 
       <section className="contracts-panel dashboard-chart-panel">
-        <div className="dashboard-chart-head"><div><h2>Seats by license</h2><p>Combined license seats across contracts</p></div><strong>{licenses.reduce((sum, license) => sum + (license.seatsPurchased ?? 0), 0)} seats</strong></div>
-        {seatTotals.length === 0 ? <p className="dashboard-empty">No seat data available.</p> : <>
-          <div className="dashboard-license-chart" role="img" aria-label="License users by license name">
+        <div className="dashboard-chart-head"><div><h2>Seats by licence</h2><p>Every contract holding the same licence is totalled here — click a row to see each contract and when it expires</p></div><strong>{licenses.reduce((sum, license) => sum + (license.seatsPurchased ?? 0), 0)} seats</strong></div>
+        {seatGroups.length === 0 ? <p className="dashboard-empty">No seat data available.</p> : <>
+          <div className="dashboard-license-chart">
             <div className="dashboard-license-axis">
               {[0, 1, 2, 3, 4].map(index => <span key={index}>{index * chartStep}</span>)}
             </div>
-            {seatTotals.map(([name, seats], index) => (
-              <div className="dashboard-license-line-row" key={name}>
-                <span className="dashboard-license-line-label" title={name}>{name}</span>
-                <div className="dashboard-license-line-track"><span className={`dashboard-license-line dashboard-line-color-${index % 6}`} style={{ width: `${Math.max((seats / chartMax) * 100, 2)}%` }}><b>{seats}</b></span></div>
-              </div>
+            {seatGroups.map((group, index) => (
+              <Fragment key={group.key}>
+                <div
+                  className={`dashboard-license-line-row dashboard-seat-row${expandedSeatKey === group.key ? ' is-expanded' : ''}`}
+                  role="button"
+                  tabIndex={0}
+                  aria-expanded={expandedSeatKey === group.key}
+                  onClick={() => toggleSeatGroup(group.key)}
+                  onKeyDown={event => {
+                    if (event.key === 'Enter' || event.key === ' ') {
+                      event.preventDefault()
+                      toggleSeatGroup(group.key)
+                    }
+                  }}
+                >
+                  <span className="dashboard-license-line-label" title={`${group.licenseName} · ${group.vendorName}`}>{group.licenseName}</span>
+                  <div className="dashboard-license-line-track"><span className={`dashboard-license-line dashboard-line-color-${index % 6}`} style={{ width: `${Math.max((group.totalSeats / chartMax) * 100, 2)}%` }}><b>{group.totalSeats}</b></span></div>
+                </div>
+                {expandedSeatKey === group.key && (
+                  <div className="dashboard-seat-detail">
+                    <div className="dashboard-seat-detail-row dashboard-seat-detail-head"><span>Contract ID</span><span>Contract</span><span>Seats</span><span>Expires</span></div>
+                    {[...group.licenses].sort((a, b) => a.expiryDate.localeCompare(b.expiryDate)).map(license => (
+                      <div className={`dashboard-seat-detail-row${license.expiryDate < today ? ' is-expired' : ''}`} key={license.licenseId}>
+                        <span>{license.contractId ?? '—'}</span>
+                        <span>{license.contractId == null ? 'No contract' : contractNumberById.get(String(license.contractId)) ?? '—'}</span>
+                        <span>{license.seatsPurchased ?? 0}</span>
+                        <span>{expiryLabel(license.expiryDate)}</span>
+                      </div>
+                    ))}
+                    <div className="dashboard-seat-detail-row dashboard-seat-detail-total"><span>Total</span><span>{group.licenses.length} contracts</span><span>{group.totalSeats}</span><span>seats</span></div>
+                  </div>
+                )}
+              </Fragment>
             ))}
           </div>
         </>}

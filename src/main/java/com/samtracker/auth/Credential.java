@@ -50,4 +50,9 @@ public class Credential {
 
     @Column(name = "last_login_at")
     private Instant lastLoginAt;
+
+    // Refreshed (throttled) on each authenticated request so admins can see who is
+    // currently active
+    @Column(name = "last_seen_at")
+    private Instant lastSeenAt;
 }

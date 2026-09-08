@@ -108,7 +108,7 @@ export default function LicensesPage() {
   }, [visibleLicenses, vendors])
 
   function exportLicenses() {
-    downloadExcel('licenses.xlsx', 'Licenses', licenses.map(license => ({
+    downloadExcel('licenses.xlsx', 'Licenses', visibleLicenses.map(license => ({
       'License name': license.licenseName,
       Vendor: license.vendorName,
       'IT owner': license.itOwner ?? '',

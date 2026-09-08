@@ -39,6 +39,9 @@ export interface CredentialView {
   username: string
   role: string
   createdAt: string
+  lastLoginAt: string | null
+  lastSeenAt: string | null
+  online: boolean
 }
 
 // Mirrors Spring Data's Page<T> response envelope

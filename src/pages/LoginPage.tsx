@@ -88,6 +88,8 @@ export default function LoginPage() {
         const status = err.response?.status
         if (status === 401) setError('Invalid username or password.')
         else if (status === 409) setError('Username already taken.')
+        else if (status === 429) setError('Too many attempts. Wait 15 minutes, or ask an admin to reset your password.')
+        else if (status === 404 && mode === 'register') setError('Self sign-up is disabled. Ask an admin to create your account.')
         else setError('Something went wrong. Please try again.')
       } else {
         setError('Something went wrong. Please try again.')

@@ -38,6 +38,13 @@ client.interceptors.request.use(config => {
 
 client.interceptors.response.use(
   response => {
+    // A misconfigured base URL makes API calls fall through to the SPA, which answers
+    // 200 text/html; surface that as a failure instead of feeding HTML into state.
+    if (typeof response.data === 'string' && /^\s*<(!doctype html|html)/i.test(response.data)) {
+      return Promise.reject(
+        new Error(`Expected JSON from ${response.config.url} but received HTML. Check VITE_API_BASE_URL.`),
+      )
+    }
     response.data = normalizeTenantIdKey(response.data)
     return response
   },

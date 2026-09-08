@@ -79,6 +79,17 @@
 .dashboard-line-color-4 { background: #a23b36; } .dashboard-line-color-4::after { background: #a23b36; }
 .dashboard-line-color-5 { background: #52769b; } .dashboard-line-color-5::after { background: #52769b; }
 @media (max-width: 600px) { .dashboard-license-axis { margin-left: 105px; } .dashboard-license-line-row { grid-template-columns: 95px minmax(0, 1fr); } }
+.dashboard-seat-row { border-radius: 6px; cursor: pointer; padding: 2px 4px; margin: 0 -4px; }
+.dashboard-seat-row:hover, .dashboard-seat-row:focus-visible { background: var(--contracts-red-bg, #f4f3ec); outline: none; }
+.dashboard-seat-row.is-expanded .dashboard-license-line-label { color: var(--contracts-accent-dark); }
+.dashboard-seat-detail { display: flex; flex-direction: column; margin: -2px 0 6px 145px; border: 1px solid #e5e4e7; border-radius: 6px; background: #fff; overflow: hidden; }
+.dashboard-seat-detail-row { display: grid; grid-template-columns: 90px minmax(0, 2fr) 70px 130px; gap: 8px; align-items: center; padding: 7px 10px; border-top: 1px solid #efeee9; color: var(--contracts-ink); font-size: 12px; }
+.dashboard-seat-detail-row:first-child { border-top: 0; }
+.dashboard-seat-detail-row > span:nth-child(2) { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.dashboard-seat-detail-head { background: #faf9f6; color: var(--contracts-soft); font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; }
+.dashboard-seat-detail-row.is-expired { color: var(--contracts-red); }
+.dashboard-seat-detail-total { background: #faf9f6; font-weight: 700; }
+@media (max-width: 600px) { .dashboard-seat-detail { margin-left: 0; } .dashboard-seat-detail-row { grid-template-columns: 70px minmax(0, 1.5fr) 50px 100px; } }
 @media (max-width: 900px) { .dashboard-alert-grid { grid-template-columns: 1fr; } }
 @media (max-width: 800px) { .dashboard-metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); } .dashboard-summary-head, .dashboard-summary-row { grid-template-columns: 1.5fr 1fr 1fr 1.25fr; } }
 @media (max-width: 560px) { .dashboard-license-form { grid-template-columns: 1fr; } .dashboard-license-actions { grid-column: auto; } }
@@ -642,3 +653,27 @@
   .contracts-license-card .license-software { flex-basis: calc(100% - 90px); }
   .contracts-license-card .license-actions { margin-left: 0; }
 }
+
+.users-table { min-width: 980px; font-size: 13px; }
+.users-table th { padding: 11px 14px; background: #f4f2eb; color: var(--contracts-soft); font-size: 11px; letter-spacing: .04em; text-transform: uppercase; text-align: left; }
+.users-table td { padding: 12px 14px; vertical-align: middle; }
+.users-table select { min-height: 30px; border-radius: 5px; font-size: 12px; }
+.users-table td:nth-child(6) { color: var(--contracts-soft); white-space: nowrap; font-size: 12px; }
+.user-timestamp { display: block; color: var(--contracts-ink); font-size: 12px; white-space: nowrap; }
+.users-table td small { display: block; margin-top: 2px; color: var(--contracts-soft); font-size: 11px; white-space: nowrap; }
+.user-status { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; font-size: 12px; font-weight: 600; }
+.user-status i { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+.user-status.is-online { color: #2f7d4f; }
+.user-status.is-online i { background: #35a163; box-shadow: 0 0 0 3px rgba(53, 161, 99, .18); }
+.user-status.is-offline { color: var(--contracts-soft); }
+.user-status.is-offline i { background: #c4c1b8; }
+.user-self-tag { color: var(--contracts-soft); font-weight: 500; }
+.user-add-form { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; padding: 14px 16px; }
+.user-add-form input,
+.user-add-form select { height: 34px; box-sizing: border-box; border: 1px solid var(--contracts-line); border-radius: 6px; padding: 0 10px; font-size: 13px; outline: none; }
+.user-add-form input { min-width: 200px; flex: 1 1 200px; }
+.user-add-form input:focus,
+.user-add-form select:focus,
+.user-password-form input:focus { border-color: var(--contracts-accent); box-shadow: 0 0 0 3px rgba(43, 90, 99, .12); }
+.user-password-form { display: flex; align-items: center; gap: 10px; }
+.user-password-form input { flex: 1 1 240px; max-width: 320px; height: 34px; box-sizing: border-box; border: 1px solid var(--contracts-line); border-radius: 6px; padding: 0 10px; font-size: 13px; outline: none; }

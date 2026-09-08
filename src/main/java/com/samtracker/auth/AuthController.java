@@ -30,6 +30,7 @@ public class AuthController {
     private final JwtService jwtService;
     private final PasswordEncoder passwordEncoder;
     private final AuthRateLimiter authRateLimiter;
+    private final SessionActivityService sessionActivityService;
     private final boolean registrationEnabled;
 
     public AuthController(AuthenticationManager authenticationManager,
@@ -39,6 +40,7 @@ public class AuthController {
             JwtService jwtService,
             PasswordEncoder passwordEncoder,
             AuthRateLimiter authRateLimiter,
+            SessionActivityService sessionActivityService,
             @Value("${app.auth.registration-enabled:false}") boolean registrationEnabled) {
         this.authenticationManager = authenticationManager;
         this.credentialRepository = credentialRepository;
@@ -47,6 +49,7 @@ public class AuthController {
         this.jwtService = jwtService;
         this.passwordEncoder = passwordEncoder;
         this.authRateLimiter = authRateLimiter;
+        this.sessionActivityService = sessionActivityService;
         this.registrationEnabled = registrationEnabled;
     }
 
@@ -67,7 +70,9 @@ public class AuthController {
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.UNAUTHORIZED));
 
         credential.setLastLoginAt(java.time.Instant.now());
+        credential.setLastSeenAt(credential.getLastLoginAt());
         credentialRepository.save(credential);
+        sessionActivityService.forget(credential.getUsername());
         String token = jwtService.generateToken(request.username(), credential.getTenantId(), credential.getRole());
         return new LoginResponse(token);
     }
@@ -75,6 +80,11 @@ public class AuthController {
     @PatchMapping("/me/password")
     public void updateOwnPassword(Authentication authentication,
             @RequestBody @Valid ChangePasswordRequest request) {
+        // /auth/** is permitAll, so an unauthenticated call reaches here with a null
+        // principal
+        if (authentication == null || !authentication.isAuthenticated()) {
+            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Not signed in");
+        }
         Credential credential = credentialRepository.findByUsername(authentication.getName())
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "User not found"));
         if (!passwordEncoder.matches(request.currentPassword(), credential.getPasswordHash())) {
