@@ -47,6 +47,12 @@ public class DataDiagnosticController {
                 "SELECT tenant_id, COUNT(*) AS cnt FROM contracts GROUP BY tenant_id");
         List<Map<String, Object>> licenseTenantCounts = jdbcTemplate.queryForList(
                 "SELECT tenant_id, COUNT(*) AS cnt FROM entitlements GROUP BY tenant_id");
+        List<Map<String, Object>> vendorTenantCounts = jdbcTemplate.queryForList(
+                "SELECT tenant_id, COUNT(*) AS cnt FROM vendors GROUP BY tenant_id");
+        List<Map<String, Object>> credentials = jdbcTemplate.queryForList(
+                "SELECT username, tenant_id, role FROM credentials");
+        List<Map<String, Object>> vendor422 = jdbcTemplate.queryForList(
+                "SELECT vendor_id, tenant_id, name FROM vendors WHERE vendor_id = 422");
         Map<String, Object> result = new LinkedHashMap<>();
         result.put("contracts", contracts);
         result.put("entitlements", entitlements);
@@ -59,6 +65,9 @@ public class DataDiagnosticController {
         result.put("contract240", sample240);
         result.put("contractTenantCounts", tenantCounts);
         result.put("licenseTenantCounts", licenseTenantCounts);
+        result.put("vendorTenantCounts", vendorTenantCounts);
+        result.put("credentials", credentials);
+        result.put("vendor422", vendor422);
         return ResponseEntity.ok(result);
     }
 }
