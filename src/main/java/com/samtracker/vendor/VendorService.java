@@ -57,6 +57,14 @@ public class VendorService {
     }
 
     public Vendor findById(Integer vendorId) {
+        if (isCurrentUserAdmin()) {
+            Long targetTenant = resolveVendorTenant(vendorId);
+            if (targetTenant == null) {
+                throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Vendor not found");
+            }
+            return vendorRepository.findByTenantIdAndVendorId(targetTenant, vendorId)
+                    .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Vendor not found"));
+        }
         return vendorRepository.findByTenantIdAndVendorId(TenantContext.get(), vendorId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Vendor not found"));
     }
@@ -172,11 +180,15 @@ public class VendorService {
     }
 
     public void delete(Integer vendorId) {
-        Vendor existing = vendorRepository.findByTenantIdAndVendorId(TenantContext.get(), vendorId)
+        Long targetTenant = isCurrentUserAdmin() ? resolveVendorTenant(vendorId) : TenantContext.get();
+        if (targetTenant == null) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Vendor not found");
+        }
+        Vendor existing = vendorRepository.findByTenantIdAndVendorId(targetTenant, vendorId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Vendor not found"));
         Number contractCount = (Number) entityManager.createNativeQuery(
                 "SELECT COUNT(*) FROM contracts WHERE tenant_id = :tenantId AND vendor_id = :vendorId")
-                .setParameter("tenantId", TenantContext.get())
+                .setParameter("tenantId", targetTenant)
                 .setParameter("vendorId", vendorId)
                 .getSingleResult();
         if (contractCount.longValue() > 0) {
