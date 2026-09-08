@@ -28,4 +28,12 @@ public interface SoftwareProductRepository extends JpaRepository<SoftwareProduct
         @Query("SELECT COUNT(DISTINCT s.vendor) FROM SoftwareProduct s WHERE s.tenantId = :tenantId AND LOWER(s.name) = LOWER(:softwareName)")
         long countDistinctVendorsBySoftwareName(@Param("tenantId") Long tenantId,
                         @Param("softwareName") String softwareName);
+
+        Page<SoftwareProduct> findByVendor(String vendor, Pageable pageable);
+
+        @Query("SELECT s.vendor, COUNT(s) FROM SoftwareProduct s GROUP BY s.vendor ORDER BY COUNT(s) DESC")
+        List<Object[]> countByVendorAcrossTenants();
+
+        @Query("SELECT COUNT(DISTINCT s.vendor) FROM SoftwareProduct s WHERE LOWER(s.name) = LOWER(:softwareName)")
+        long countDistinctVendorsBySoftwareNameAcrossTenants(@Param("softwareName") String softwareName);
 }
