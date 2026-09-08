@@ -191,7 +191,7 @@ public class ContractService {
     private Contract updateForAdmin(Integer id, UpdateContractRequest request) {
         Long tenantId = resolveTenantIdForContract(id);
         validateContractInput(request);
-        var vendor = runInTenant(tenantId, () -> findVendorByPublicId(tenantId, request.vendorId()));
+        var vendor = findVendorByPublicIdAdmin(tenantId, request.vendorId());
 
         int updated = jdbcTemplate.update(
                 """
@@ -510,6 +510,20 @@ public class ContractService {
     }
 
     public List<ContractLicenseView> findVendorLicenses(Integer vendorId) {
+        if (isCurrentUserAdmin()) {
+            Long tenantId = resolveTenantIdForVendor(vendorId);
+            String vendorName = vendorNameRaw(tenantId, vendorId);
+            return jdbcTemplate.query(
+                    """
+                            SELECT e.license_id, e.contract_id, e.license_name, e.it_owner, e.comments, e.software_id,
+                                   s.vendor AS vendor_name, s.name AS software_name, s.version,
+                                   e.license_type, e.status, e.payment_method, e.seats_purchased, e.price, e.start_date, e.expiry_date
+                            FROM entitlements e
+                            JOIN software_products s ON s.software_id = e.software_id AND s.tenant_id = e.tenant_id
+                            WHERE e.tenant_id = ? AND LOWER(s.vendor) = LOWER(?)
+                            """,
+                    this::mapLicenseRow, tenantId, vendorName);
+        }
         Long tenantId = TenantContext.get();
         Vendor vendor = findVendorByPublicId(tenantId, vendorId);
         return entitlementRepository.findByTenantIdAndSoftwareProduct_VendorIgnoreCase(tenantId, vendor.getName())
@@ -521,6 +535,10 @@ public class ContractService {
                 || request.softwareName() == null || request.softwareName().isBlank()) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
                     "vendor, licenseName and softwareName are required");
+        }
+        if (isCurrentUserAdmin()) {
+            Long tenantId = resolveTenantIdForVendor(vendorId);
+            return addVendorLicenseRaw(tenantId, vendorId, request);
         }
         Long tenantId = TenantContext.get();
         Vendor vendor = findVendorByPublicId(tenantId, vendorId);
@@ -563,11 +581,64 @@ public class ContractService {
         return toLicenseView(entitlementRepository.findById(saved.getId()).orElse(saved));
     }
 
+    private ContractLicenseView addVendorLicenseRaw(Long tenantId, Integer vendorId, CreateContractLicenseRequest request) {
+        String vendorName = vendorNameRaw(tenantId, vendorId);
+        String softwareName = request.softwareName().strip();
+        String licenseName = request.licenseName().strip();
+        Integer softwareId = findOrCreateSoftwareRaw(tenantId, softwareName, vendorName, request.version());
+
+        LocalDate startDate;
+        LocalDate expiryDate;
+        Integer contractId = request.contractId();
+        if (contractId != null) {
+            Map<String, Object> contractRow = requireContractRaw(tenantId, contractId);
+            Integer contractVendorId = (Integer) contractRow.get("vendor_id");
+            if (!vendorId.equals(contractVendorId)) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Contract does not belong to vendor");
+            }
+            startDate = request.startDate() == null ? (LocalDate) contractRow.get("start_date") : request.startDate();
+            expiryDate = request.expiryDate() == null ? (LocalDate) contractRow.get("end_date") : request.expiryDate();
+            if (expiryDate.isBefore(startDate)) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "expiryDate must be on or after startDate");
+            }
+            jdbcTemplate.update("UPDATE contracts SET start_date = ?, end_date = ? WHERE contract_id = ? AND tenant_id = ?",
+                    startDate, expiryDate, contractId, tenantId);
+        } else {
+            startDate = request.startDate() == null ? LocalDate.now() : request.startDate();
+            expiryDate = request.expiryDate() == null ? LocalDate.of(9999, 12, 31) : request.expiryDate();
+        }
+
+        String status = (request.status() == null ? com.samtracker.entitlement.LicenseStatus.ACTIVE : request.status())
+                .name();
+        String paymentMethod = (request.paymentMethod() == null
+                ? com.samtracker.entitlement.PaymentMethod.PURCHASE_ORDER
+                : request.paymentMethod()).name();
+
+        jdbcTemplate.update("""
+                INSERT INTO entitlements (tenant_id, software_id, contract_id, license_name, it_owner, comments,
+                    license_type, status, payment_method, seats_purchased, price, start_date, expiry_date)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """, tenantId, softwareId, contractId, licenseName,
+                request.itOwner() == null ? null : request.itOwner().strip(),
+                request.comments() == null ? null : request.comments().strip(),
+                request.licenseType().name(), status, paymentMethod, request.seatsPurchased(), request.price(),
+                startDate, expiryDate);
+
+        Integer licenseId = jdbcTemplate.queryForObject(
+                "SELECT license_id FROM entitlements WHERE tenant_id = ? AND software_id = ? ORDER BY license_id DESC LIMIT 1",
+                Integer.class, tenantId, softwareId);
+        return findLicenseByIdRaw(tenantId, licenseId);
+    }
+
     public ContractLicenseView updateVendorLicense(Integer vendorId, Integer licenseId,
             UpdateContractLicenseRequest request) {
         if (request == null || request.licenseName() == null || request.licenseName().isBlank()
                 || request.softwareName() == null || request.softwareName().isBlank()) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "licenseName and softwareName are required");
+        }
+        if (isCurrentUserAdmin()) {
+            Long tenantId = resolveTenantIdForVendor(vendorId);
+            return updateVendorLicenseRaw(tenantId, vendorId, licenseId, request);
         }
         Long tenantId = TenantContext.get();
         Vendor vendor = findVendorByPublicId(tenantId, vendorId);
@@ -624,13 +695,106 @@ public class ContractService {
         return toLicenseView(entitlementRepository.findById(saved.getId()).orElse(saved));
     }
 
+    private ContractLicenseView updateVendorLicenseRaw(Long tenantId, Integer vendorId, Integer licenseId,
+            UpdateContractLicenseRequest request) {
+        String vendorName = vendorNameRaw(tenantId, vendorId);
+        Map<String, Object> licenseRow = jdbcTemplate.queryForList(
+                "SELECT e.software_id, e.start_date, e.expiry_date FROM entitlements e "
+                        + "JOIN software_products s ON s.software_id = e.software_id AND s.tenant_id = e.tenant_id "
+                        + "WHERE e.license_id = ? AND e.tenant_id = ? AND LOWER(s.vendor) = LOWER(?)",
+                licenseId, tenantId, vendorName)
+                .stream().findFirst()
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "License not found"));
+
+        String softwareName = request.softwareName().strip();
+        Integer softwareId = findOrCreateSoftwareRaw(tenantId, softwareName, vendorName, request.version());
+
+        String status = (request.status() == null ? com.samtracker.entitlement.LicenseStatus.ACTIVE : request.status())
+                .name();
+        Integer contractId = request.contractId();
+        LocalDate startDate;
+        LocalDate expiryDate;
+        if (contractId != null) {
+            Map<String, Object> contractRow = requireContractRaw(tenantId, contractId);
+            Integer contractVendorId = (Integer) contractRow.get("vendor_id");
+            if (!vendorId.equals(contractVendorId)) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Contract does not belong to vendor");
+            }
+            startDate = request.startDate() == null ? (LocalDate) contractRow.get("start_date") : request.startDate();
+            expiryDate = request.expiryDate() == null ? (LocalDate) contractRow.get("end_date") : request.expiryDate();
+            if (Boolean.TRUE.equals(request.renew())) {
+                startDate = (LocalDate) contractRow.get("end_date");
+                expiryDate = startDate.plusYears(1);
+                status = com.samtracker.entitlement.LicenseStatus.ACTIVE.name();
+            }
+            if (expiryDate.isBefore(startDate)) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "expiryDate must be on or after startDate");
+            }
+            jdbcTemplate.update("UPDATE contracts SET start_date = ?, end_date = ? WHERE contract_id = ? AND tenant_id = ?",
+                    startDate, expiryDate, contractId, tenantId);
+        } else {
+            startDate = request.startDate() == null ? (LocalDate) licenseRow.get("start_date") : request.startDate();
+            expiryDate = request.expiryDate() == null ? (LocalDate) licenseRow.get("expiry_date") : request.expiryDate();
+            if (Boolean.TRUE.equals(request.renew())) {
+                startDate = (LocalDate) licenseRow.get("expiry_date");
+                expiryDate = startDate.plusYears(1);
+                status = com.samtracker.entitlement.LicenseStatus.ACTIVE.name();
+            }
+        }
+        String paymentMethod = (request.paymentMethod() == null
+                ? com.samtracker.entitlement.PaymentMethod.PURCHASE_ORDER
+                : request.paymentMethod()).name();
+
+        jdbcTemplate.update("""
+                UPDATE entitlements
+                SET software_id = ?, contract_id = ?, license_name = ?, comments = ?, license_type = ?, status = ?,
+                    payment_method = ?, seats_purchased = ?, price = ?, start_date = ?, expiry_date = ?
+                WHERE license_id = ? AND tenant_id = ?
+                """, softwareId, contractId, request.licenseName().strip(),
+                request.comments() == null ? null : request.comments().strip(), request.licenseType().name(), status,
+                paymentMethod, request.seatsPurchased(), request.price(), startDate, expiryDate, licenseId, tenantId);
+
+        return findLicenseByIdRaw(tenantId, licenseId);
+    }
+
     public void deleteVendorLicense(Integer vendorId, Integer licenseId) {
+        if (isCurrentUserAdmin()) {
+            Long tenantId = resolveTenantIdForVendor(vendorId);
+            String vendorName = vendorNameRaw(tenantId, vendorId);
+            Long count = jdbcTemplate.queryForObject(
+                    "SELECT COUNT(*) FROM entitlements e JOIN software_products s ON s.software_id = e.software_id "
+                            + "AND s.tenant_id = e.tenant_id WHERE e.license_id = ? AND e.tenant_id = ? AND LOWER(s.vendor) = LOWER(?)",
+                    Long.class, licenseId, tenantId, vendorName);
+            if (count == null || count == 0) {
+                throw new ResponseStatusException(HttpStatus.NOT_FOUND, "License not found");
+            }
+            jdbcTemplate.update("DELETE FROM entitlements WHERE license_id = ? AND tenant_id = ?", licenseId, tenantId);
+            return;
+        }
         Long tenantId = TenantContext.get();
         Vendor vendor = findVendorByPublicId(tenantId, vendorId);
         Entitlement entitlement = entitlementRepository.findByTenantIdAndId(tenantId, licenseId)
                 .filter(existing -> existing.getSoftwareProduct().getVendor().equalsIgnoreCase(vendor.getName()))
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "License not found"));
         entitlementRepository.delete(entitlement);
+    }
+
+    private Long resolveTenantIdForVendor(Integer vendorId) {
+        List<Long> rows = jdbcTemplate.queryForList("SELECT tenant_id FROM vendors WHERE vendor_id = ?", Long.class,
+                vendorId);
+        if (rows.isEmpty()) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Vendor not found");
+        }
+        return rows.get(0);
+    }
+
+    private String vendorNameRaw(Long tenantId, Integer vendorId) {
+        List<String> rows = jdbcTemplate.queryForList(
+                "SELECT name FROM vendors WHERE tenant_id = ? AND vendor_id = ?", String.class, tenantId, vendorId);
+        if (rows.isEmpty()) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Vendor not found");
+        }
+        return rows.get(0);
     }
 
     private void validateContractInput(UpdateContractRequest request) {
@@ -661,6 +825,28 @@ public class ContractService {
         }
         return vendorRepository.findByTenantIdAndVendorId(tenantId, vendorId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.BAD_REQUEST, "Vendor not found"));
+    }
+
+    // Admin cross-tenant path: JPA is bound to the request's own tenant, so a raw
+    // SQL lookup is used here instead of vendorRepository (see VendorService for details).
+    private Vendor findVendorByPublicIdAdmin(Long tenantId, Integer vendorId) {
+        if (vendorId == null) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "vendorId is required");
+        }
+        List<Vendor> rows = jdbcTemplate.query(
+                "SELECT vendor_id, name, vendor_jde_number FROM vendors WHERE tenant_id = ? AND vendor_id = ?",
+                (rs, rowNum) -> {
+                    Vendor vendor = new Vendor();
+                    vendor.setVendorId((Integer) rs.getObject("vendor_id"));
+                    vendor.setName(rs.getString("name"));
+                    vendor.setVendorJDENumber(rs.getString("vendor_jde_number"));
+                    return vendor;
+                },
+                tenantId, vendorId);
+        if (rows.isEmpty()) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Vendor not found");
+        }
+        return rows.get(0);
     }
 
     private void attachVendorSnapshot(Contract contract) {

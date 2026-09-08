@@ -355,7 +355,7 @@ export default function VendorsPage() {
         .toLowerCase()
         .includes(needle)
     })
-  }, [contracts, vendors, licenses])
+  }, [contracts, vendors, licenses, search])
 
   const grandTotal = insights.reduce((sum, r) => sum + r.totalBudget, 0)
 
