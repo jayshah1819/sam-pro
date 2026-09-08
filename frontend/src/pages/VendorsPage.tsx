@@ -105,6 +105,10 @@ export default function VendorsPage() {
   const [savingVendorLicense, setSavingVendorLicense] = useState(false)
   const [topAddLicenseOpen, setTopAddLicenseOpen] = useState(false)
   const [vendorPage, setVendorPage] = useState(0)
+  const [licenseVendorQuery, setLicenseVendorQuery] = useState('')
+  const [licenseVendorPickerOpen, setLicenseVendorPickerOpen] = useState(false)
+  const [licenseContractQuery, setLicenseContractQuery] = useState('')
+  const [licenseContractPickerOpen, setLicenseContractPickerOpen] = useState(false)
 
   useEffect(() => {
     setLoading(true)
@@ -375,6 +379,8 @@ export default function VendorsPage() {
     setExpandedContracts(prev => ({ ...prev, [contractId]: !prev[contractId] }))
   }
 
+  const selectedVendorLicenseContracts = contracts.filter(contract => contract.vendorId === Number(vendorLicenseForm.vendorId))
+
   return (
     <div className="vendors-preview contracts-preview flex flex-col gap-4">
       <div className="flex items-baseline justify-between">
@@ -440,7 +446,7 @@ export default function VendorsPage() {
               </button>
             </form>
           </ToolbarDropdown>
-          <button type="button" className="contracts-add-button" onClick={() => setTopAddLicenseOpen(true)}>+ Add license</button>
+          <button type="button" className="contracts-add-button" onClick={() => { setVendorLicenseForm(EMPTY_VENDOR_LICENSE_FORM); setLicenseVendorQuery(''); setLicenseContractQuery(''); setTopAddLicenseOpen(true) }}>+ Add license</button>
         </div>
       </div>
 
@@ -450,8 +456,54 @@ export default function VendorsPage() {
             <div className="contracts-modal-head"><h2 id="vendor-license-title">Add license</h2><button type="button" className="contracts-modal-close" onClick={() => setTopAddLicenseOpen(false)} aria-label="Close">×</button></div>
             <div className="contracts-modal-body">
               <form onSubmit={event => { const vendorId = Number(vendorLicenseForm.vendorId); if (vendorId) void addVendorLicense(event, vendorId) }} className="dashboard-license-form">
-                <select required value={vendorLicenseForm.vendorId} onChange={event => setVendorLicenseForm(form => ({ ...form, vendorId: event.target.value, contractId: '' }))}><option value="">Choose vendor</option>{vendors.map(vendor => <option key={vendor.vendorId} value={vendor.vendorId ?? ''}>{vendor.name}</option>)}</select>
-                <select value={vendorLicenseForm.contractId} disabled={!vendorLicenseForm.vendorId} onChange={event => setVendorLicenseForm(form => ({ ...form, contractId: event.target.value }))}><option value="">Standalone vendor license</option>{contracts.filter(contract => contract.vendorId === Number(vendorLicenseForm.vendorId)).map(contract => <option key={contract.id} value={contract.id}>{contract.contractNumber}</option>)}</select>
+                <div className="vendor-picker">
+                  <input
+                    required
+                    value={licenseVendorQuery || (vendors.find(vendor => String(vendor.vendorId) === vendorLicenseForm.vendorId)?.name ?? '')}
+                    placeholder="Search or choose vendor"
+                    onChange={event => {
+                      setLicenseVendorPickerOpen(true)
+                      setLicenseVendorQuery(event.target.value)
+                      const typed = event.target.value.toLowerCase()
+                      const matching = vendors.find(vendor => vendor.name.toLowerCase() === typed)
+                      if (matching?.vendorId != null) setVendorLicenseForm(form => ({ ...form, vendorId: String(matching.vendorId), contractId: '' }))
+                      else setVendorLicenseForm(form => ({ ...form, vendorId: '', contractId: '' }))
+                    }}
+                    onFocus={() => setLicenseVendorPickerOpen(true)}
+                    onBlur={() => window.setTimeout(() => setLicenseVendorPickerOpen(false), 120)}
+                  />
+                  {licenseVendorPickerOpen && (
+                    <div className="vendor-picker-menu">
+                      {vendors.filter(vendor => vendor.name.toLowerCase().includes(licenseVendorQuery.toLowerCase())).slice(0, 12).map(vendor => (
+                        <button type="button" key={vendor.vendorId} className="vendor-picker-option" onMouseDown={event => event.preventDefault()} onClick={() => { setVendorLicenseForm(form => ({ ...form, vendorId: String(vendor.vendorId), contractId: '' })); setLicenseVendorQuery(vendor.name); setLicenseVendorPickerOpen(false) }}>
+                          <span>{vendor.name}</span><small>vendor_id {vendor.vendorId}</small>
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+                <div className="vendor-picker">
+                  <input
+                    value={licenseContractQuery || (selectedVendorLicenseContracts.find(contract => String(contract.id) === vendorLicenseForm.contractId)?.contractNumber ?? '')}
+                    disabled={!vendorLicenseForm.vendorId}
+                    placeholder="Search or choose contract"
+                    onChange={event => { setLicenseContractQuery(event.target.value); setLicenseContractPickerOpen(true); setVendorLicenseForm(form => ({ ...form, contractId: '' })) }}
+                    onFocus={() => setLicenseContractPickerOpen(true)}
+                    onBlur={() => window.setTimeout(() => setLicenseContractPickerOpen(false), 120)}
+                  />
+                  {licenseContractPickerOpen && vendorLicenseForm.vendorId && (
+                    <div className="vendor-picker-menu">
+                      <button type="button" className="vendor-picker-option" onMouseDown={event => event.preventDefault()} onClick={() => { setVendorLicenseForm(form => ({ ...form, contractId: '' })); setLicenseContractQuery(''); setLicenseContractPickerOpen(false) }}>
+                        <span>Standalone vendor license</span>
+                      </button>
+                      {selectedVendorLicenseContracts.filter(contract => `${contract.contractNumber} ${contract.softwareName ?? ''}`.toLowerCase().includes(licenseContractQuery.toLowerCase())).slice(0, 12).map(contract => (
+                        <button type="button" key={contract.id} className="vendor-picker-option" onMouseDown={event => event.preventDefault()} onClick={() => { setVendorLicenseForm(form => ({ ...form, contractId: String(contract.id) })); setLicenseContractQuery(contract.contractNumber); setLicenseContractPickerOpen(false) }}>
+                          <span>{contract.contractNumber}</span><small>{contract.softwareName || 'Contract'}</small>
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
                 <input required placeholder="License name" value={vendorLicenseForm.licenseName} onChange={event => setVendorLicenseForm(form => ({ ...form, licenseName: event.target.value }))} />
                 <input required placeholder="Software name" value={vendorLicenseForm.softwareName} onChange={event => setVendorLicenseForm(form => ({ ...form, softwareName: event.target.value }))} />
                 <input placeholder="Version" value={vendorLicenseForm.version} onChange={event => setVendorLicenseForm(form => ({ ...form, version: event.target.value }))} />
