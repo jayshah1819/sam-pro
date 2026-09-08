@@ -19,7 +19,7 @@ public class AppDataController {
     }
 
     @GetMapping("/app-data")
-    @PreAuthorize("hasAnyRole('ADMIN','EDITOR','USER')")
+    @PreAuthorize("hasAnyRole('ADMIN','EDITOR','VIEWER')")
     public AppDataResponse getAppData() {
         PageRequest page = PageRequest.of(0, 500);
         return new AppDataResponse(

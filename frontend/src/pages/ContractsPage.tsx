@@ -1,7 +1,7 @@
 import { Fragment, useEffect, useMemo, useState, type FormEvent } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { client } from '../api'
-import type { AppData, Contract, ContractLicense, SpringPage, Vendor } from '../types'
+import type { Contract, ContractLicense, SpringPage, Vendor } from '../types'
 import '../styles/contracts.css'
 import { downloadExcel } from '../utils/exportExcel'
 
@@ -97,6 +97,8 @@ export default function ContractsPage() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [reloadTick, setReloadTick] = useState(0)
+  const [highlightedContractId, setHighlightedContractId] = useState<number | null>(null)
+  const [searchText, setSearchText] = useState('')
   const [search, setSearch] = useState('')
 
   const [saving, setSaving] = useState(false)
@@ -108,6 +110,7 @@ export default function ContractsPage() {
   const [vendorOptions, setVendorOptions] = useState<Vendor[]>([])
 
   const [editingId, setEditingId] = useState<number | null>(null)
+  const [detailsContract, setDetailsContract] = useState<Contract | null>(null)
   const [editForm, setEditForm] = useState<ContractForm>(EMPTY_FORM)
   const [savingEdit, setSavingEdit] = useState(false)
 
@@ -121,8 +124,15 @@ export default function ContractsPage() {
   const [deletingLicenseId, setDeletingLicenseId] = useState<number | null>(null)
   const [addLicenseOpenId, setAddLicenseOpenId] = useState<number | null>(null)
 
-  function handleSearchChange(value: string) {
-    setSearch(value)
+  function submitSearch(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    setSearch(searchText.trim())
+    setPage(0)
+  }
+
+  function clearSearch() {
+    setSearchText('')
+    setSearch('')
     setPage(0)
   }
 
@@ -199,7 +209,7 @@ export default function ContractsPage() {
         if (vendorId == null) throw new Error('Vendor ID was not returned')
         setVendorOptions(prev => [createdVendor, ...prev])
       }
-      await client.post('/contracts', {
+      const { data: createdContract } = await client.post<Contract>('/contracts', {
         contractNumber: addForm.contractNumber.trim(),
         itOwner: addForm.itOwner.trim() || null,
         comments: addForm.comments.trim() || null,
@@ -215,6 +225,8 @@ export default function ContractsPage() {
       setAddingNewVendor(false)
       setVendorPickerOpen(false)
       setAddModalOpen(false)
+      setHighlightedContractId(createdContract.id)
+      window.setTimeout(() => setHighlightedContractId(null), 1800)
       setPage(0)
       setReloadTick(t => t + 1)
     } catch (err: any) {
@@ -256,7 +268,7 @@ export default function ContractsPage() {
     try {
       const vendorId = findVendorOption(editForm.vendorName)?.vendorId
       if (vendorId == null) throw new Error('Choose an existing vendor before updating the contract')
-      await client.put(`/contracts/${id}`, {
+      const { data: updatedContract } = await client.put<Contract>(`/contracts/${id}`, {
         contractNumber: editForm.contractNumber.trim(),
         itOwner: editForm.itOwner.trim() || null,
         comments: editForm.comments.trim() || null,
@@ -269,6 +281,8 @@ export default function ContractsPage() {
         value: editForm.value.trim() ? Number(editForm.value) : null,
       })
       cancelEdit()
+      setHighlightedContractId(updatedContract.id)
+      window.setTimeout(() => setHighlightedContractId(null), 1800)
       setReloadTick(t => t + 1)
     } catch (err: any) {
       const message = err?.response?.data?.message
@@ -436,8 +450,7 @@ export default function ContractsPage() {
   const total = visibleContracts.reduce((sum, c) => sum + (c.value ?? 0), 0)
 
   async function exportContracts() {
-    const { data: all } = await client.get<AppData>('/app-data')
-    downloadExcel('contracts.xlsx', 'Contracts', all.contracts.map(contract => ({
+    downloadExcel('contracts.xlsx', 'Contracts', visibleContracts.map(contract => ({
       'Contract #': contract.contractNumber,
       Vendor: contract.vendorName ?? contract.vendor?.name ?? '',
       'Vendor JDE': contract.vendorJDENumber ?? contract.vendor?.vendorJDENumber ?? '',
@@ -466,12 +479,16 @@ export default function ContractsPage() {
 
       <div className="contracts-toolbar flex flex-col gap-2">
         <div className="flex flex-wrap items-center gap-2">
-          <input
-            value={search}
-            onChange={e => handleSearchChange(e.target.value)}
-            placeholder="Search contracts, licenses, software, or JDE"
-            className="h-8 min-w-72 px-3 rounded-md border border-[#e5e4e7] text-sm text-[#08060d] outline-none focus:border-[#aa3bff]"
-          />
+          <form onSubmit={submitSearch} className="flex flex-wrap items-center gap-2">
+            <input
+              value={searchText}
+              onChange={e => setSearchText(e.target.value)}
+              placeholder="Search contracts, licenses, software, or JDE"
+              className="h-8 min-w-72 px-3 rounded-md border border-[#e5e4e7] text-sm text-[#08060d] outline-none focus:border-[#aa3bff]"
+            />
+            <button type="submit" className="contracts-search-button">Search</button>
+            {search && <button type="button" onClick={clearSearch} className="contracts-clear-button">Clear</button>}
+          </form>
           <button type="button" className="contracts-add-button" onClick={() => { setSaveError(null); setAddModalOpen(true) }}>
             + Add contract
           </button>
@@ -566,12 +583,12 @@ export default function ContractsPage() {
                   />
                 </>
               )}
-              <input
+              {addingNewVendor && <input
                 value={addForm.vendorJDENumber}
                 onChange={e => setAddForm(f => ({ ...f, vendorJDENumber: e.target.value }))}
-                placeholder="Vendor JDE number"
+                placeholder="Vendor JDE number (optional)"
                 className="h-9 px-3 rounded-lg border border-[#e5e4e7] text-sm text-[#08060d] outline-none focus:border-[#aa3bff]"
-              />
+              />}
               <input
                 value={addForm.department}
                 onChange={e => setAddForm(f => ({ ...f, department: e.target.value }))}
@@ -637,6 +654,33 @@ export default function ContractsPage() {
 
       {saveError && <p className="text-sm text-red-600">{saveError}</p>}
 
+      {editingId != null && (() => {
+        const contract = visibleContracts.find(item => item.id === editingId)
+        if (!contract) return null
+        return (
+          <div className="contracts-modal-overlay" role="presentation" onMouseDown={event => { if (event.target === event.currentTarget) cancelEdit() }}>
+            <div className="contracts-modal contract-edit-modal" role="dialog" aria-modal="true" aria-labelledby="contract-edit-title">
+              <div className="contracts-modal-head"><div><p className="vendor-edit-kicker">CONTRACT PROFILE</p><h2 id="contract-edit-title">Edit {contract.contractNumber}</h2></div><button type="button" className="contracts-modal-close" onClick={cancelEdit} aria-label="Close">×</button></div>
+              <form className="contracts-modal-body contract-edit-form" onSubmit={event => { event.preventDefault(); void saveEdit(editingId) }}>
+                <label>Contract number<input value={editForm.contractNumber} onChange={event => setEditForm(form => ({ ...form, contractNumber: event.target.value }))} required /></label>
+                <label>Vendor<input value={editForm.vendorName} onChange={event => updateEditVendorName(event.target.value)} list="contract-vendors" required /></label>
+                <label>Software<input value={editForm.softwareName} onChange={event => setEditForm(form => ({ ...form, softwareName: event.target.value }))} /></label>
+                <label>Department<input value={editForm.department} onChange={event => setEditForm(form => ({ ...form, department: event.target.value }))} /></label>
+                <label>IT owner<input value={editForm.itOwner} onChange={event => setEditForm(form => ({ ...form, itOwner: event.target.value }))} /></label>
+                <label>Value<input type="number" value={editForm.value} onChange={event => setEditForm(form => ({ ...form, value: event.target.value }))} /></label>
+                <label>Start date<input type="date" value={editForm.startDate} onChange={event => setEditForm(form => ({ ...form, startDate: event.target.value }))} /></label>
+                <label>End date<input type="date" value={editForm.endDate} onChange={event => setEditForm(form => ({ ...form, endDate: event.target.value }))} /></label>
+                <label>Status<select value={editForm.status} onChange={event => setEditForm(form => ({ ...form, status: event.target.value as Contract['status'] }))}><option value="ACTIVE">Active</option><option value="PENDING_RENEWAL">Pending renewal</option><option value="EXPIRED">Expired</option></select></label>
+                <label className="contract-edit-wide">Comments<textarea value={editForm.comments} onChange={event => setEditForm(form => ({ ...form, comments: event.target.value }))} rows={4} /></label>
+                <div className="vendor-edit-actions contract-edit-wide"><button type="button" className="contracts-clear-button" onClick={cancelEdit}>Cancel</button><button type="button" className="vendor-delete-button" onClick={() => void deleteContract(editingId)} disabled={savingEdit || deletingId === editingId}>{deletingId === editingId ? 'Deleting…' : 'Delete contract'}</button><button type="submit" className="contracts-search-button" disabled={savingEdit}>{savingEdit ? 'Saving…' : 'Save contract'}</button></div>
+              </form>
+            </div>
+          </div>
+        )
+      })()}
+
+      {detailsContract && <div className="contracts-modal-overlay" role="presentation" onMouseDown={event => { if (event.target === event.currentTarget) setDetailsContract(null) }}><div className="contracts-modal record-details-modal" role="dialog" aria-modal="true"><div className="contracts-modal-head"><div><p className="vendor-edit-kicker">CONTRACT DETAILS</p><h2>{detailsContract.contractNumber}</h2></div><button type="button" className="contracts-modal-close" onClick={() => setDetailsContract(null)} aria-label="Close">×</button></div><div className="contracts-modal-body record-details-grid"><span><small>Vendor</small>{detailsContract.vendorName ?? detailsContract.vendor?.name}</span><span><small>Value</small>{fmtCurrency(detailsContract.value)}</span><span><small>Department</small>{detailsContract.department || '—'}</span><span><small>IT owner</small>{detailsContract.itOwner || '—'}</span><span><small>Start</small>{detailsContract.startDate}</span><span><small>End</small>{detailsContract.endDate}</span><span><small>Status</small>{detailsContract.status.replace('_', ' ')}</span><span><small>Licenses</small>{(licensesByContract[detailsContract.id] ?? []).length}</span><span className="record-details-wide"><small>Comments</small>{detailsContract.comments || '—'}</span></div></div></div>}
+
       {loading && <p className="text-sm text-[#6b6375]">Loading…</p>}
       {error && <p className="text-sm text-red-600">{error}</p>}
 
@@ -681,7 +725,7 @@ export default function ContractsPage() {
               </thead>
               <tbody>
                 {visibleContracts.map(c => (
-                  editingId === c.id ? (
+                  false ? (
                     <tr key={c.id} className="border-b border-[#e5e4e7] last:border-0 bg-[#faf9f7]">
                       <td className="px-4 py-2">
                         <input
@@ -792,7 +836,7 @@ export default function ContractsPage() {
                     </tr>
                   ) : (
                     <Fragment key={c.id}>
-                      <tr className="contract-row">
+                      <tr className={`contract-row ${highlightedContractId === c.id ? 'record-highlight' : ''}`}>
                         <td><div className="contract-number">{c.contractNumber}</div><div className="contract-subtitle">{c.department || 'Contract'}</div></td>
                         <td className="px-4 py-3 text-[#08060d]">{c.vendorName ?? c.vendor.name}</td>
                         <td className="px-4 py-3 text-[#6b6375]">{c.vendorJDENumber || c.vendor.vendorJDENumber || '—'}</td>
@@ -826,6 +870,7 @@ export default function ContractsPage() {
                             >
                               Edit
                             </button>
+                            <button type="button" className="record-details-button" onClick={() => setDetailsContract(c)} aria-label={`View details for ${c.contractNumber}`} title="View details">i</button>
                           </div>
                         </td>
                       </tr>
@@ -834,7 +879,10 @@ export default function ContractsPage() {
                           <td colSpan={11} className="px-4 py-4">
                             <div className="flex flex-col gap-3">
                               {(addLicenseOpenId === c.id || editingLicenseId != null) ? (
-                              <div className="contracts-license-form grid gap-2 md:grid-cols-6">
+                              <div className="contracts-modal-overlay contracts-license-overlay" role="presentation" onMouseDown={event => { if (event.target === event.currentTarget) cancelEditLicense() }}>
+                              <div className="contracts-modal contracts-license-modal" role="dialog" aria-modal="true" aria-labelledby="contract-license-title">
+                              <div className="contracts-modal-head"><div><p className="vendor-edit-kicker">CONTRACT LICENSE</p><h2 id="contract-license-title">{editingLicenseId == null ? 'Add license' : 'Edit license'}</h2></div><button type="button" className="contracts-modal-close" onClick={cancelEditLicense} aria-label="Close">×</button></div>
+                              <div className="contracts-modal-body contracts-license-form grid gap-2 md:grid-cols-2">
                                 <input
                                   value={licenseForm.licenseName}
                                   onChange={e => setLicenseForm(f => ({ ...f, licenseName: e.target.value }))}
@@ -909,6 +957,8 @@ export default function ContractsPage() {
                                     </>
                                   )}
                                 </div>
+                              </div>
+                              </div>
                               </div>
                               ) : (
                                 <div className="license-add-row">

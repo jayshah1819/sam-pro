@@ -6,7 +6,7 @@ import { useAuth } from '../context'
 
 type Mode = 'login' | 'register'
 
-const INPUT = 'h-10 px-3 rounded-lg border border-[#e5e4e7] text-sm text-[#08060d] placeholder:text-[#6b6375] outline-none focus:border-[#aa3bff] transition-colors'
+const INPUT = 'auth-input'
 
 function Tab({ label, active, onClick }: { label: string; active: boolean; onClick: () => void }) {
   return (
@@ -41,6 +41,7 @@ export default function LoginPage() {
   const [error, setError] = useState<string | null>(null)
   const [success, setSuccess] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
+  const [usernameAvailable, setUsernameAvailable] = useState<boolean | null>(null)
 
   function parseRole(token: string): string {
     try {
@@ -57,6 +58,7 @@ export default function LoginPage() {
     setMode(next)
     setError(null)
     setSuccess(null)
+    setUsernameAvailable(null)
     setPassword('')
     setConfirmPassword('')
   }
@@ -67,6 +69,7 @@ export default function LoginPage() {
     setSuccess(null)
 
     if (mode === 'register') {
+      if (usernameAvailable === false) { setError('Username already exists. Choose another username.'); return }
       if (password.length < 8) { setError('Password must be at least 8 characters.'); return }
       if (password !== confirmPassword) { setError('Passwords do not match.'); return }
     }
@@ -80,8 +83,8 @@ export default function LoginPage() {
         navigate(role === 'VIEWER' ? '/contracts' : '/dashboard', { replace: true })
       } else {
         await client.post('/auth/register', { username, password })
-        setSuccess('Account created. You can now sign in.')
         switchMode('login')
+        setSuccess('Account created. You can now sign in.')
       }
     } catch (err) {
       if (isAxiosError(err)) {
@@ -97,10 +100,21 @@ export default function LoginPage() {
     }
   }
 
+  async function checkUsername() {
+    if (mode !== 'register' || !username.trim()) return
+    try {
+      const { data } = await client.get<{ available: boolean }>('/auth/username-available', { params: { username: username.trim() } })
+      setUsernameAvailable(data.available)
+      if (!data.available) setError('Username already exists. Choose another username.')
+      else if (error?.startsWith('Username already exists')) setError(null)
+    } catch {
+      setUsernameAvailable(null)
+    }
+  }
+
   return (
     <div className="min-h-screen grid place-items-center bg-[#f4f3ec] px-4">
       <div className="w-full max-w-sm">
-
         <div className="text-center mb-8">
           <h1 className="text-2xl font-bold tracking-tight text-[#08060d]">SAM Tracker</h1>
           <p className="mt-1 text-sm text-[#6b6375]">
@@ -109,7 +123,6 @@ export default function LoginPage() {
         </div>
 
         <div className="bg-white border border-[#e5e4e7] rounded-xl shadow-sm px-8 py-8">
-          {/* Mode tabs */}
           <div className="flex border-b border-[#e5e4e7] mb-6 -mx-8 px-8">
             <Tab label="Sign in"       active={mode === 'login'}    onClick={() => switchMode('login')} />
             <Tab label="Create account" active={mode === 'register'} onClick={() => switchMode('register')} />
@@ -130,10 +143,13 @@ export default function LoginPage() {
                 autoComplete="username"
                 required
                 value={username}
-                onChange={e => setUsername(e.target.value)}
+                onChange={e => { setUsername(e.target.value); setUsernameAvailable(null) }}
+                onBlur={() => void checkUsername()}
                 className={INPUT}
                 placeholder="your-username"
               />
+              {mode === 'register' && usernameAvailable === false && <span className="text-xs text-red-600">Username already exists</span>}
+              {mode === 'register' && usernameAvailable === true && <span className="text-xs text-green-700">Username is available</span>}
             </div>
 
             <div className="flex flex-col gap-1.5">
@@ -183,7 +199,6 @@ export default function LoginPage() {
             </button>
           </form>
         </div>
-
       </div>
     </div>
   )

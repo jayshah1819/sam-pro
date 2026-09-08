@@ -23,7 +23,7 @@ public class SoftwareProductController {
     }
 
     @GetMapping
-    @PreAuthorize("hasAnyRole('ADMIN','EDITOR','USER')")
+    @PreAuthorize("hasAnyRole('ADMIN','EDITOR','VIEWER')")
     public Page<SoftwareProduct> getAll(
             @RequestParam(required = false) String vendor,
             @PageableDefault(size = 20) Pageable pageable) {
@@ -34,7 +34,7 @@ public class SoftwareProductController {
     }
 
     @GetMapping("/vendors")
-    @PreAuthorize("hasAnyRole('ADMIN','EDITOR','USER')")
+    @PreAuthorize("hasAnyRole('ADMIN','EDITOR','VIEWER')")
     public List<VendorSoftwareSummary> getVendorSummary() {
         return softwareProductService.findVendorSummary();
     }

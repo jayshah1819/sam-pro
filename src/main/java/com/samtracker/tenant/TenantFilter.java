@@ -23,6 +23,12 @@ public class TenantFilter extends OncePerRequestFilter {
             FilterChain chain) throws ServletException, IOException {
         try {
             String authHeader = request.getHeader("Authorization");
+            if (authHeader == null || !authHeader.startsWith("Bearer ")) {
+                String fallbackToken = request.getHeader("X-SAM-Tracker-Token");
+                if (fallbackToken != null && !fallbackToken.isBlank()) {
+                    authHeader = "Bearer " + fallbackToken;
+                }
+            }
             if (authHeader != null && authHeader.startsWith("Bearer ")) {
                 String token = authHeader.substring(7);
                 if (jwtService.isTokenValid(token)) {

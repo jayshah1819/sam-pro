@@ -60,12 +60,6 @@
             <optional>true</optional>
         </dependency>
 
-        <!-- RabbitMQ -->
-        <dependency>
-            <groupId>org.springframework.boot</groupId>
-            <artifactId>spring-boot-starter-amqp</artifactId>
-        </dependency>
-
         <!-- Loads .env into Spring environment -->
         <dependency>
             <groupId>me.paulschwarz</groupId>

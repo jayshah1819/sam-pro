@@ -1,0 +1,1 @@
+ALTER TABLE credentials ADD COLUMN last_login_at TIMESTAMP NULL;

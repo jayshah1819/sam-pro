@@ -16,6 +16,8 @@ import org.springframework.web.bind.annotation.*;
 import org.springframework.web.server.ResponseStatusException;
 import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.security.core.Authentication;
+import java.util.Map;
 
 @RestController
 @RequestMapping("/auth")
@@ -64,8 +66,27 @@ public class AuthController {
         Credential credential = credentialRepository.findByUsername(request.username())
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.UNAUTHORIZED));
 
+        credential.setLastLoginAt(java.time.Instant.now());
+        credentialRepository.save(credential);
         String token = jwtService.generateToken(request.username(), credential.getTenantId(), credential.getRole());
         return new LoginResponse(token);
+    }
+
+    @PatchMapping("/me/password")
+    public void updateOwnPassword(Authentication authentication,
+            @RequestBody @Valid ChangePasswordRequest request) {
+        Credential credential = credentialRepository.findByUsername(authentication.getName())
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "User not found"));
+        if (!passwordEncoder.matches(request.currentPassword(), credential.getPasswordHash())) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Current password is incorrect");
+        }
+        credential.setPasswordHash(passwordEncoder.encode(request.newPassword()));
+        credentialRepository.save(credential);
+    }
+
+    @GetMapping("/username-available")
+    public Map<String, Boolean> usernameAvailable(@RequestParam String username) {
+        return Map.of("available", credentialRepository.findByUsername(username.trim()).isEmpty());
     }
 
     @PostMapping("/register")

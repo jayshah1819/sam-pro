@@ -6,6 +6,15 @@ export const setToken = (token: string | null): void => {
   currentToken = token
 }
 
+export const clearToken = (): void => {
+  currentToken = null
+  try {
+    localStorage.removeItem(TOKEN_KEY)
+  } catch {
+    // Ignore localStorage access errors.
+  }
+}
+
 export const getToken = (): string | null => {
   if (currentToken) return currentToken
   try {

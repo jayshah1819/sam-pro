@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
+    "build:aws": "vite build --mode production && if grep -Raq 'localhost:8080' dist/assets/*.js; then echo 'Production bundle contains localhost API URL' >&2; exit 1; fi",
     "lint": "oxlint",
     "preview": "vite preview"
   },

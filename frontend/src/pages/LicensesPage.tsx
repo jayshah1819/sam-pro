@@ -1,6 +1,6 @@
 import { Fragment, useEffect, useMemo, useState, type FormEvent } from 'react'
 import { client } from '../api'
-import type { AppData, Contract, ContractLicense, Vendor } from '../types'
+import type { Contract, ContractLicense, Vendor } from '../types'
 import '../styles/contracts.css'
 import { downloadExcel } from '../utils/exportExcel'
 
@@ -47,6 +47,8 @@ export default function LicensesPage() {
   const [view, setView] = useState<'licenses' | 'software'>('licenses')
   const [expandedSoftware, setExpandedSoftware] = useState<Record<string, boolean>>({})
   const [editingLicenseId, setEditingLicenseId] = useState<number | null>(null)
+  const [detailsLicense, setDetailsLicense] = useState<ContractLicense | null>(null)
+  const [highlightedLicenseId, setHighlightedLicenseId] = useState<number | null>(null)
   const [vendorPickerOpen, setVendorPickerOpen] = useState(false)
   const [vendorQuery, setVendorQuery] = useState('')
   const [contractPickerOpen, setContractPickerOpen] = useState(false)
@@ -54,13 +56,21 @@ export default function LicensesPage() {
   const [licensePage, setLicensePage] = useState(0)
 
   useEffect(() => {
-    client.get<AppData>('/app-data')
-      .then(({ data }) => {
-        setLicenses(data.licenses ?? [])
-        setVendors(data.vendors ?? [])
-        setContracts(data.contracts ?? [])
+    Promise.allSettled([
+      client.get<ContractLicense[]>('/contracts/licenses/all'),
+      client.get<{ content: Vendor[] }>('/vendors', { params: { page: 0, size: 500 } }),
+      client.get<{ content: Contract[] }>('/contracts', { params: { page: 0, size: 500 } }),
+    ])
+      .then(([licenseResult, vendorResult, contractResult]) => {
+        const failures: string[] = []
+        if (licenseResult.status === 'fulfilled') setLicenses(licenseResult.value.data ?? [])
+        else failures.push('licenses')
+        if (vendorResult.status === 'fulfilled') setVendors(vendorResult.value.data.content ?? [])
+        else failures.push('vendors')
+        if (contractResult.status === 'fulfilled') setContracts(contractResult.value.data.content ?? [])
+        else failures.push('contracts')
+        if (failures.length) setError(`Failed to load ${failures.join(', ')}.`)
       })
-      .catch(() => setError('Failed to load licenses.'))
       .finally(() => setLoading(false))
   }, [])
 
@@ -152,6 +162,8 @@ export default function LicensesPage() {
         ? await client.post<ContractLicense>(`/vendors/${form.vendorId}/licenses`, payload)
         : await client.put<ContractLicense>(`/vendors/${form.vendorId}/licenses/${editingLicenseId}`, payload)
       setLicenses(previous => editingLicenseId == null ? [...previous, data] : previous.map(license => license.licenseId === editingLicenseId ? data : license))
+      setHighlightedLicenseId(data.licenseId)
+      window.setTimeout(() => setHighlightedLicenseId(null), 1800)
       setForm(EMPTY_FORM)
       setEditingLicenseId(null)
       setVendorQuery('')
@@ -307,6 +319,7 @@ export default function LicensesPage() {
           </div>
         </div>
       )}
+      {detailsLicense && <div className="contracts-modal-overlay" role="presentation" onMouseDown={event => { if (event.target === event.currentTarget) setDetailsLicense(null) }}><div className="contracts-modal record-details-modal" role="dialog" aria-modal="true"><div className="contracts-modal-head"><div><p className="vendor-edit-kicker">LICENSE DETAILS</p><h2>{detailsLicense.licenseName}</h2></div><button type="button" className="contracts-modal-close" onClick={() => setDetailsLicense(null)} aria-label="Close">×</button></div><div className="contracts-modal-body record-details-grid"><span><small>Vendor</small>{detailsLicense.vendorName}</span><span><small>Software</small>{detailsLicense.softwareName}</span><span><small>Price</small>{fmtCurrency(detailsLicense.price)}</span><span><small>Seats</small>{detailsLicense.seatsPurchased ?? '—'}</span><span><small>Type</small>{detailsLicense.licenseType.replace('_', ' ')}</span><span><small>Status</small>{detailsLicense.status}</span><span><small>Payment</small>{detailsLicense.paymentMethod.replace('_', ' ')}</span><span><small>Contract</small>{detailsLicense.contractId ?? 'Standalone'}</span><span><small>Start</small>{detailsLicense.startDate}</span><span><small>Expiry</small>{detailsLicense.expiryDate}</span><span className="record-details-wide"><small>Comments</small>{detailsLicense.comments || '—'}</span></div></div></div>}
       {!loading && !error && (
         <div className="contracts-panel licenses-panel">
           <div className="contracts-table-wrap">
@@ -329,7 +342,7 @@ export default function LicensesPage() {
               </thead>
               <tbody>
                 {pagedLicenses.map(license => (
-                  <tr key={license.licenseId} className="contract-row">
+                  <tr key={license.licenseId} className={`contract-row ${highlightedLicenseId === license.licenseId ? 'record-highlight' : ''}`}>
                     <td className="font-semibold">{license.licenseName}</td>
                     <td>{license.itOwner || '—'}</td>
                     <td>{license.vendorName || '—'}</td>
@@ -341,7 +354,7 @@ export default function LicensesPage() {
                     <td><span className={license.paymentMethod === 'CREDIT_CARD' ? 'payment-badge payment-credit-card' : 'payment-badge'}>{license.paymentMethod === 'CREDIT_CARD' ? 'Credit card' : 'PO'}</span></td>
                     <td>{license.startDate || '—'}</td>
                     <td>{license.expiryDate || '—'}</td>
-                    <td><button type="button" className="license-edit-button" onClick={() => editLicense(license)}>Edit</button></td>
+                    <td><button type="button" className="record-details-button" onClick={() => setDetailsLicense(license)} aria-label={`View details for ${license.licenseName}`} title="View details">i</button> <button type="button" className="license-edit-button" onClick={() => editLicense(license)}>Edit</button></td>
                   </tr>
                 ))}
                 {visibleLicenses.length === 0 && (

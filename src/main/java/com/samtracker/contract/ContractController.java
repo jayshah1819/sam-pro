@@ -25,7 +25,7 @@ public class ContractController {
     }
 
     @GetMapping
-    @PreAuthorize("hasAnyRole('ADMIN','EDITOR','USER')")
+    @PreAuthorize("hasAnyRole('ADMIN','EDITOR','VIEWER')")
     public Page<Contract> getAll(
             @RequestParam(required = false) String q,
             @RequestParam(required = false) Integer vendorId,
@@ -52,33 +52,33 @@ public class ContractController {
     }
 
     @GetMapping("/{id}")
-    @PreAuthorize("hasAnyRole('ADMIN','EDITOR','USER')")
+    @PreAuthorize("hasAnyRole('ADMIN','EDITOR','VIEWER')")
     public Contract getById(@PathVariable Integer id) {
         return contractService.findByIdForCurrentUser(id);
     }
 
     @GetMapping("/{id}/licenses")
-    @PreAuthorize("hasAnyRole('ADMIN','EDITOR','USER')")
+    @PreAuthorize("hasAnyRole('ADMIN','EDITOR','VIEWER')")
     public List<ContractLicenseView> getLicenses(@PathVariable Integer id) {
         return contractService.findLicenses(id);
     }
 
     @GetMapping("/licenses/all")
-    @PreAuthorize("hasAnyRole('ADMIN','EDITOR','USER')")
+    @PreAuthorize("hasAnyRole('ADMIN','EDITOR','VIEWER')")
     public List<ContractLicenseView> getAllLicenses() {
         return contractService.findAllLicensesForCurrentUser();
     }
 
     @PostMapping("/{id}/licenses")
     @ResponseStatus(HttpStatus.CREATED)
-    @PreAuthorize("hasAnyRole('ADMIN','EDITOR','USER')")
+    @PreAuthorize("hasAnyRole('ADMIN','EDITOR','VIEWER')")
     public ContractLicenseView addLicense(@PathVariable Integer id,
             @Valid @RequestBody CreateContractLicenseRequest request) {
         return contractService.addLicense(id, request);
     }
 
     @PutMapping("/{id}/licenses/{licenseId}")
-    @PreAuthorize("hasAnyRole('ADMIN','EDITOR','USER')")
+    @PreAuthorize("hasAnyRole('ADMIN','EDITOR','VIEWER')")
     public ContractLicenseView updateLicense(@PathVariable Integer id, @PathVariable Integer licenseId,
             @Valid @RequestBody UpdateContractLicenseRequest request) {
         return contractService.updateLicense(id, licenseId, request);
@@ -86,7 +86,7 @@ public class ContractController {
 
     @DeleteMapping("/{id}/licenses/{licenseId}")
     @ResponseStatus(HttpStatus.NO_CONTENT)
-    @PreAuthorize("hasAnyRole('ADMIN','EDITOR','USER')")
+    @PreAuthorize("hasAnyRole('ADMIN','EDITOR','VIEWER')")
     public void deleteLicense(@PathVariable Integer id, @PathVariable Integer licenseId) {
         contractService.deleteLicense(id, licenseId);
     }

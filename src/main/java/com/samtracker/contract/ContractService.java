@@ -658,7 +658,7 @@ public class ContractService {
 
     private List<Contract> fetchContractsForAdmin(Integer contractId) {
         String sql = """
-                    SELECT c.contract_id, c.tenant_id, c.contract_number, c.department, c.start_date, c.end_date, c.status, c.value,
+                    SELECT c.contract_id, c.tenant_id, c.contract_number, c.department, c.it_owner, c.start_date, c.end_date, c.status, c.value,
                                         c.vendor_id AS contract_vendor_id, c.vendor_name, c.vendor_jde_number, c.software_name,
                                     v.name AS vendor_entity_name, v.vendor_id AS vendor_display_id, v.vendor_jde_number AS vendor_entity_jde_number, v.canonical_name, v.contact_email, v.website
                     FROM contracts c

@@ -1,5 +1,5 @@
 import axios from 'axios'
-import { getToken } from './tokenStore'
+import { clearToken, getToken } from './tokenStore'
 
 function normalizeTenantIdKey<T>(value: T): T {
   if (Array.isArray(value)) {
@@ -21,8 +21,25 @@ function normalizeTenantIdKey<T>(value: T): T {
   return value
 }
 
+const configuredApiUrl = import.meta.env.VITE_API_BASE_URL
+const localBrowser = typeof window !== 'undefined'
+  && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')
+
+function tokenIsExpired(token: string | null): boolean {
+  if (!token) return true
+  try {
+    const payload = token.split('.')[1]
+    const normalized = payload.replace(/-/g, '+').replace(/_/g, '/')
+    const padded = normalized + '='.repeat((4 - normalized.length % 4) % 4)
+    const claims = JSON.parse(atob(padded)) as { exp?: number }
+    return claims.exp != null && Date.now() / 1000 >= claims.exp
+  } catch {
+    return true
+  }
+}
+
 const client = axios.create({
-  baseURL: import.meta.env.VITE_API_BASE_URL,
+  baseURL: import.meta.env.DEV && localBrowser ? '/api' : configuredApiUrl,
 })
 
 client.interceptors.request.use(config => {
@@ -31,6 +48,9 @@ client.interceptors.request.use(config => {
   const isPublicAuthRoute = requestUrl === '/auth/login' || requestUrl === '/auth/register'
   if (token && !isPublicAuthRoute) {
     config.headers.Authorization = `Bearer ${token}`
+    if (!localBrowser) {
+      config.headers['X-SAM-Tracker-Token'] = token
+    }
   }
   return config
 })
@@ -52,12 +72,14 @@ client.interceptors.response.use(
     // skip redirect when the login endpoint itself returns 401
     if (
       error.response?.status === 401 &&
+      tokenIsExpired(getToken()) &&
       window.location.pathname !== '/login' &&
       !isImportedDataRoute &&
       !isDashboardRoute &&
       !isLoginRoute &&
       !isRegisterRoute
     ) {
+      clearToken()
       window.location.href = '/login'
     }
     return Promise.reject(error)

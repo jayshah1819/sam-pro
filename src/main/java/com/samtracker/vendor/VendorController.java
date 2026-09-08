@@ -30,7 +30,7 @@ public class VendorController {
     }
 
     @GetMapping
-    @PreAuthorize("hasAnyRole('ADMIN','EDITOR','USER')")
+    @PreAuthorize("hasAnyRole('ADMIN','EDITOR','VIEWER')")
     public Page<Vendor> getAll(@RequestParam(required = false) String q,
             @PageableDefault(size = 20) Pageable pageable) {
         return q != null && !q.isBlank() ? vendorService.findByNameContains(q, pageable)
@@ -44,7 +44,7 @@ public class VendorController {
     }
 
     @GetMapping("/{vendorId}")
-    @PreAuthorize("hasRole('ADMIN')")
+    @PreAuthorize("hasAnyRole('ADMIN','EDITOR','VIEWER')")
     public Vendor getById(@PathVariable Integer vendorId) {
         return vendorService.findById(vendorId);
     }
@@ -69,21 +69,21 @@ public class VendorController {
     }
 
     @GetMapping("/{vendorId}/licenses")
-    @PreAuthorize("hasAnyRole('ADMIN','EDITOR','USER')")
+    @PreAuthorize("hasAnyRole('ADMIN','EDITOR','VIEWER')")
     public List<com.samtracker.contract.ContractLicenseView> getLicenses(@PathVariable Integer vendorId) {
         return contractService.findVendorLicenses(vendorId);
     }
 
     @PostMapping("/{vendorId}/licenses")
     @ResponseStatus(HttpStatus.CREATED)
-    @PreAuthorize("hasAnyRole('ADMIN','EDITOR','USER')")
+    @PreAuthorize("hasAnyRole('ADMIN','EDITOR','VIEWER')")
     public com.samtracker.contract.ContractLicenseView addLicense(@PathVariable Integer vendorId,
             @Valid @RequestBody com.samtracker.contract.CreateContractLicenseRequest request) {
         return contractService.addVendorLicense(vendorId, request);
     }
 
     @PutMapping("/{vendorId}/licenses/{licenseId}")
-    @PreAuthorize("hasAnyRole('ADMIN','EDITOR','USER')")
+    @PreAuthorize("hasAnyRole('ADMIN','EDITOR','VIEWER')")
     public com.samtracker.contract.ContractLicenseView updateLicense(@PathVariable Integer vendorId,
             @PathVariable Integer licenseId,
             @Valid @RequestBody com.samtracker.contract.UpdateContractLicenseRequest request) {
@@ -92,15 +92,28 @@ public class VendorController {
 
     @DeleteMapping("/{vendorId}/licenses/{licenseId}")
     @ResponseStatus(HttpStatus.NO_CONTENT)
-    @PreAuthorize("hasAnyRole('ADMIN','EDITOR','USER')")
+    @PreAuthorize("hasAnyRole('ADMIN','EDITOR','VIEWER')")
     public void deleteLicense(@PathVariable Integer vendorId, @PathVariable Integer licenseId) {
         contractService.deleteVendorLicense(vendorId, licenseId);
     }
 
     @PostMapping
     @ResponseStatus(HttpStatus.CREATED)
-    @PreAuthorize("hasAnyRole('ADMIN','EDITOR','USER')")
+    @PreAuthorize("hasAnyRole('ADMIN','EDITOR','VIEWER')")
     public Vendor create(@RequestBody Vendor vendor) {
         return vendorService.create(vendor);
+    }
+
+    @PutMapping("/{vendorId}")
+    @PreAuthorize("hasAnyRole('ADMIN','EDITOR','VIEWER')")
+    public Vendor update(@PathVariable Integer vendorId, @RequestBody Vendor vendor) {
+        return vendorService.update(vendorId, vendor);
+    }
+
+    @DeleteMapping("/{vendorId}")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    @PreAuthorize("hasAnyRole('ADMIN','EDITOR','VIEWER')")
+    public void delete(@PathVariable Integer vendorId) {
+        vendorService.delete(vendorId);
     }
 }

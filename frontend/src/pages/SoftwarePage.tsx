@@ -19,6 +19,7 @@ export default function SoftwarePage() {
   const [search, setSearch] = useState('')
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [detailsSoftware, setDetailsSoftware] = useState<SoftwareEntry | null>(null)
 
   useEffect(() => {
     let active = true
@@ -102,6 +103,8 @@ export default function SoftwarePage() {
       {error && <p className="text-sm text-red-600">{error}</p>}
       {!loading && !error && visibleGroups.length === 0 && <div className="contracts-panel px-6 py-12 text-center text-sm text-[#6b6375]">No matching software found.</div>}
 
+      {detailsSoftware && <div className="contracts-modal-overlay" role="presentation" onMouseDown={event => { if (event.target === event.currentTarget) setDetailsSoftware(null) }}><div className="contracts-modal record-details-modal" role="dialog" aria-modal="true"><div className="contracts-modal-head"><div><p className="vendor-edit-kicker">SOFTWARE DETAILS</p><h2>{detailsSoftware.name}</h2></div><button type="button" className="contracts-modal-close" onClick={() => setDetailsSoftware(null)} aria-label="Close">×</button></div><div className="contracts-modal-body record-details-grid"><span><small>Software ID</small>{detailsSoftware.softwareId}</span><span><small>Vendor</small>{detailsSoftware.vendor}</span><span><small>Version</small>{detailsSoftware.version}</span><span><small>Licenses</small>{detailsSoftware.licenses.length}</span><span><small>Total cost</small>{detailsSoftware.licenses.reduce((sum, license) => sum + (license.price ?? 0), 0).toLocaleString('en-US', { style: 'currency', currency: 'USD' })}</span><span><small>Seats</small>{detailsSoftware.licenses.reduce((sum, license) => sum + (license.seatsPurchased ?? 0), 0)}</span></div></div></div>}
+
       {!loading && !error && visibleGroups.map(group => {
         const isOpen = expanded[group.vendor] ?? true
         return (
@@ -125,7 +128,7 @@ export default function SoftwarePage() {
                         <td className="font-mono text-xs">{software.softwareId}</td>
                         <td><div className="contract-number">{software.name}</div><div className="contract-subtitle">{software.vendor}</div></td>
                         <td>{software.version}</td>
-                        <td>{software.licenses.length === 0 ? <span className="text-[#5b5b57]">No licenses</span> : <div className="software-license-list">{software.licenses.map(license => <span key={`${license.licenseId}-${license.contractNumber}`} className="software-license-chip">{license.licenseId} · {license.licenseName} · {license.contractNumber} · {license.price == null ? 'No price' : `$${license.price.toLocaleString()}`}</span>)}</div>}</td>
+                        <td>{software.licenses.length === 0 ? <span className="text-[#5b5b57]">No licenses</span> : <div className="software-license-list">{software.licenses.map(license => <span key={`${license.licenseId}-${license.contractNumber}`} className="software-license-chip">{license.licenseId} · {license.licenseName} · {license.contractNumber} · {license.price == null ? 'No price' : `$${license.price.toLocaleString()}`}</span>)}</div>} <button type="button" className="record-details-button" onClick={() => setDetailsSoftware(software)} aria-label={`View details for ${software.name}`} title="View details">i</button></td>
                       </tr>
                     ))}
                   </tbody>

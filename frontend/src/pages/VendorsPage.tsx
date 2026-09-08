@@ -1,7 +1,7 @@
 import { Fragment, useEffect, useMemo, useState, type FormEvent } from 'react'
 import { client } from '../api'
 import { ToolbarDropdown } from '../components'
-import type { AppData, Contract, ContractLicense, Vendor } from '../types'
+import type { Contract, ContractLicense, Vendor } from '../types'
 import '../styles/contracts.css'
 import { downloadExcel } from '../utils/exportExcel'
 
@@ -85,6 +85,7 @@ export default function VendorsPage() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [expanded, setExpanded] = useState<Record<string, boolean>>({})
+  const [detailsOpen, setDetailsOpen] = useState<Record<string, boolean>>({})
   const [expandedContracts, setExpandedContracts] = useState<Record<number, boolean>>({})
   const [searchText, setSearchText] = useState('')
   const [search, setSearch] = useState('')
@@ -93,8 +94,13 @@ export default function VendorsPage() {
   const [vendorContactEmail, setVendorContactEmail] = useState('')
   const [vendorAddress, setVendorAddress] = useState('')
   const [vendorComments, setVendorComments] = useState('')
+  const [vendorWebsite, setVendorWebsite] = useState('')
   const [savingVendor, setSavingVendor] = useState(false)
+  const [deletingVendorId, setDeletingVendorId] = useState<number | null>(null)
   const [saveError, setSaveError] = useState<string | null>(null)
+  const [editingVendorId, setEditingVendorId] = useState<number | null>(null)
+  const [highlightedVendorId, setHighlightedVendorId] = useState<number | null>(null)
+  const [vendorEditDraft, setVendorEditDraft] = useState<Record<number, Vendor>>({})
   const [vendorLicenseForm, setVendorLicenseForm] = useState<VendorLicenseForm>(EMPTY_VENDOR_LICENSE_FORM)
   const [savingVendorLicense, setSavingVendorLicense] = useState(false)
   const [topAddLicenseOpen, setTopAddLicenseOpen] = useState(false)
@@ -104,13 +110,21 @@ export default function VendorsPage() {
     setLoading(true)
     setError(null)
 
-    client.get<AppData>('/app-data')
-      .then(({ data }) => {
-        setVendors(data.vendors ?? [])
-        setContracts(data.contracts ?? [])
-        setLicenses(data.licenses ?? [])
+    Promise.allSettled([
+      client.get<{ content: Vendor[] }>('/vendors', { params: { page: 0, size: 500 } }),
+      client.get<{ content: Contract[] }>('/contracts', { params: { page: 0, size: 500 } }),
+      client.get<ContractLicense[]>('/contracts/licenses/all'),
+    ])
+      .then(([vendorResult, contractResult, licenseResult]) => {
+        const failures: string[] = []
+        if (vendorResult.status === 'fulfilled') setVendors(vendorResult.value.data.content ?? [])
+        else failures.push('vendors')
+        if (contractResult.status === 'fulfilled') setContracts(contractResult.value.data.content ?? [])
+        else failures.push('contracts')
+        if (licenseResult.status === 'fulfilled') setLicenses(licenseResult.value.data ?? [])
+        else failures.push('licenses')
+        if (failures.length) setError(`Failed to load ${failures.join(', ')}.`)
       })
-      .catch(() => setError('Failed to load vendors or contracts.'))
       .finally(() => setLoading(false))
   }, [])
 
@@ -124,6 +138,10 @@ export default function VendorsPage() {
     setSearchText('')
     setVendorPage(0)
     setSearch('')
+  }
+
+  function toggleVendor(vendorKey: string) {
+    setExpanded(prev => ({ ...prev, [vendorKey]: !prev[vendorKey] }))
   }
 
   async function addVendor(e: FormEvent<HTMLFormElement>) {
@@ -140,19 +158,106 @@ export default function VendorsPage() {
         vendorJDENumber: vendorJDENumber.trim() || null,
         contactEmail: vendorContactEmail.trim() || null,
         address: vendorAddress.trim() || null,
+        website: vendorWebsite.trim() || null,
         comments: vendorComments.trim() || null,
       })
       setVendors(prev => [data, ...prev])
+      setHighlightedVendorId(data.vendorId ?? null)
+      window.setTimeout(() => setHighlightedVendorId(null), 1800)
       setVendorName('')
       setVendorJDENumber('')
       setVendorContactEmail('')
       setVendorAddress('')
+      setVendorWebsite('')
       setVendorComments('')
     } catch (err: any) {
       const message = err?.response?.data?.message
       setSaveError(typeof message === 'string' ? message : 'Failed to add vendor.')
     } finally {
       setSavingVendor(false)
+    }
+  }
+
+  function beginEditVendor(vendor: Vendor) {
+    if (vendor.vendorId == null) {
+      return
+    }
+    setEditingVendorId(vendor.vendorId)
+    setVendorEditDraft(prev => ({ ...prev, [vendor.vendorId!]: { ...vendor } }))
+  }
+
+  function updateVendorDraft(vendorId: number, patch: Partial<Vendor>) {
+    const base = vendors.find(v => v.vendorId === vendorId)
+    setVendorEditDraft(prev => ({
+      ...prev,
+      [vendorId]: {
+        ...(base ?? prev[vendorId] ?? { tenantId: '', name: '', canonicalName: null, aliases: [], vendorJDENumber: null, contactEmail: null, address: null, website: null, comments: null }),
+        ...patch,
+      },
+    }))
+  }
+
+  async function updateVendor(vendorId: number) {
+    const draft = vendorEditDraft[vendorId]
+    const base = vendors.find(v => v.vendorId === vendorId) ?? draft
+    if (!base || !draft) {
+      return
+    }
+
+    setSavingVendor(true)
+    setSaveError(null)
+    try {
+      const { data } = await client.put<Vendor>(`/vendors/${vendorId}`, {
+        name: draft.name?.trim() || base.name,
+        vendorJDENumber: draft.vendorJDENumber?.trim() || null,
+        canonicalName: draft.canonicalName?.trim() || null,
+        contactEmail: draft.contactEmail?.trim() || null,
+        address: draft.address?.trim() || null,
+        website: draft.website?.trim() || null,
+        comments: draft.comments?.trim() || null,
+      })
+      setVendors(prev => prev.map(item => item.vendorId === data.vendorId ? { ...item, ...data } : item))
+      setHighlightedVendorId(data.vendorId ?? vendorId)
+      window.setTimeout(() => setHighlightedVendorId(null), 1800)
+      setVendorEditDraft(prev => {
+        const next = { ...prev }
+        delete next[vendorId]
+        return next
+      })
+      setEditingVendorId(null)
+    } catch (err: any) {
+      const responseMessage = err?.response?.data?.message
+      const message = typeof responseMessage === 'string' ? responseMessage : err?.response?.status === 401
+        ? 'Your session is not authorized for this update. Sign out and sign in again.'
+        : 'Failed to update vendor.'
+      setSaveError(message)
+    } finally {
+      setSavingVendor(false)
+    }
+  }
+
+  async function deleteVendor(vendor: VendorInsight) {
+    if (vendor.vendorId == null || !window.confirm(`Delete ${vendor.vendorName}?`)) return
+    setDeletingVendorId(vendor.vendorId)
+    setSaveError(null)
+    try {
+      await client.delete(`/vendors/${vendor.vendorId}`)
+      setVendors(previous => previous.filter(item => item.vendorId !== vendor.vendorId))
+      setExpanded(previous => {
+        const next = { ...previous }
+        delete next[vendor.vendorKey]
+        return next
+      })
+      setDetailsOpen(previous => {
+        const next = { ...previous }
+        delete next[vendor.vendorKey]
+        return next
+      })
+    } catch (err: any) {
+      const message = err?.response?.data?.message
+      setSaveError(typeof message === 'string' ? message : 'Failed to delete vendor.')
+    } finally {
+      setDeletingVendorId(null)
     }
   }
 
@@ -266,10 +371,6 @@ export default function VendorsPage() {
   const vendorPageCount = Math.max(1, Math.ceil(insights.length / VENDOR_PAGE_SIZE))
   const visibleInsights = insights.slice(vendorPage * VENDOR_PAGE_SIZE, (vendorPage + 1) * VENDOR_PAGE_SIZE)
 
-  function toggleVendor(vendorKey: string) {
-    setExpanded(prev => ({ ...prev, [vendorKey]: !prev[vendorKey] }))
-  }
-
   function toggleContract(contractId: number) {
     setExpandedContracts(prev => ({ ...prev, [contractId]: !prev[contractId] }))
   }
@@ -315,6 +416,12 @@ export default function VendorsPage() {
                 value={vendorContactEmail}
                 onChange={e => setVendorContactEmail(e.target.value)}
                 placeholder="Contact email (optional)"
+                className="h-9 px-3 rounded-lg border border-[#e5e4e7] text-sm text-[#08060d] outline-none focus:border-[#aa3bff]"
+              />
+              <input
+                value={vendorWebsite}
+                onChange={e => setVendorWebsite(e.target.value)}
+                placeholder="Website (optional)"
                 className="h-9 px-3 rounded-lg border border-[#e5e4e7] text-sm text-[#08060d] outline-none focus:border-[#aa3bff]"
               />
               <input
@@ -379,7 +486,7 @@ export default function VendorsPage() {
         const licensesForContract = (contractId: number) => v.licenses.filter(license => license.contractId === contractId)
         const standaloneLicenses = v.licenses.filter(license => license.contractId == null)
         return (
-          <div key={v.vendorKey} className="vendor-panel contracts-panel">
+          <div key={v.vendorKey} className={`vendor-panel contracts-panel ${highlightedVendorId === v.vendorId ? 'record-highlight' : ''}`}>
             <div
               role="button"
               tabIndex={0}
@@ -404,10 +511,115 @@ export default function VendorsPage() {
                   <span><small>Licenses</small><strong>{fmtCurrency(v.totalLicensePrice)}</strong></span>
                   <span><small>Contracts</small><strong>{fmtCurrency(v.totalBudget)}</strong></span>
                 </div>
+                <div className="vendor-side-actions">
+                  <button
+                    type="button"
+                    className="vendor-details-button"
+                    aria-expanded={detailsOpen[v.vendorKey] ?? false}
+                    onClick={event => {
+                      event.stopPropagation()
+                      setDetailsOpen(previous => ({ ...previous, [v.vendorKey]: !(previous[v.vendorKey] ?? false) }))
+                    }}
+                  >
+                    Details
+                  </button>
+                </div>
               </div>
             </div>
 
+            {detailsOpen[v.vendorKey] && (
+              <div className="contracts-modal-overlay" role="presentation" onMouseDown={event => { if (event.target === event.currentTarget) setDetailsOpen(previous => ({ ...previous, [v.vendorKey]: false })) }}>
+                <div className="contracts-modal vendor-details-modal" role="dialog" aria-modal="true" aria-labelledby="vendor-details-title">
+                  <div className="contracts-modal-head">
+                    <div>
+                      <p className="vendor-details-kicker">VENDOR DETAILS</p>
+                      <h2 id="vendor-details-title">{v.vendorName}</h2>
+                    </div>
+                    <button type="button" className="contracts-modal-close" onClick={() => setDetailsOpen(previous => ({ ...previous, [v.vendorKey]: false }))} aria-label="Close">×</button>
+                  </div>
+                  <div className="contracts-modal-body">
+                    <div className="vendor-details-grid vendor-details-modal-grid">
+                      <span><small>JDE number</small>{v.vendorJDENumber || '—'}</span>
+                      <span><small>Contact email</small>{v.vendorContactEmail || '—'}</span>
+                      <span><small>Website</small>{v.vendorWebsite || '—'}</span>
+                      <span><small>Address</small>{v.vendorAddress || '—'}</span>
+                      <span><small>Contracts</small>{v.contractCount}</span>
+                      <span><small>Licenses</small>{v.licenses.length}</span>
+                      <span><small>Contract value</small>{fmtCurrency(v.totalBudget)}</span>
+                      <span><small>License value</small>{fmtCurrency(v.totalLicensePrice)}</span>
+                    </div>
+                  </div>
+                  <div className="vendor-details-actions vendor-details-modal-actions">
+                  <button
+                    type="button"
+                    className="vendor-edit-button"
+                    onClick={event => {
+                      event.stopPropagation()
+                      setDetailsOpen(previous => ({ ...previous, [v.vendorKey]: false }))
+                      if (v.vendorId != null) {
+                        const vendorRecord = vendors.find(vendor => vendor.vendorId === v.vendorId) ?? {
+                          vendorId: v.vendorId, tenantId: '', name: v.vendorName,
+                          vendorJDENumber: v.vendorJDENumber, canonicalName: null, aliases: [],
+                          contactEmail: v.vendorContactEmail, address: v.vendorAddress,
+                          website: v.vendorWebsite, comments: null,
+                        }
+                        beginEditVendor(vendorRecord)
+                      }
+                    }}
+                  >Edit vendor</button>
+                  <button type="button" className="vendor-delete-button" disabled={deletingVendorId === v.vendorId} onClick={event => { event.stopPropagation(); void deleteVendor(v) }}>
+                    {deletingVendorId === v.vendorId ? 'Deleting…' : 'Delete vendor'}
+                  </button>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {editingVendorId === (v.vendorId ?? null) && (() => {
+              const draft = v.vendorId == null ? null : (vendorEditDraft[v.vendorId] ?? vendors.find(item => item.vendorId === v.vendorId))
+              if (!draft) return null
+              return (
+                <div className="contracts-modal-overlay" role="presentation" onMouseDown={event => { if (event.target === event.currentTarget) setEditingVendorId(null) }}>
+                  <div className="contracts-modal vendor-edit-modal" role="dialog" aria-modal="true" aria-labelledby="vendor-edit-title">
+                    <div className="contracts-modal-head">
+                      <div>
+                        <p className="vendor-edit-kicker">VENDOR PROFILE</p>
+                        <h2 id="vendor-edit-title">Edit {draft.name}</h2>
+                      </div>
+                      <button type="button" className="contracts-modal-close" onClick={() => setEditingVendorId(null)} aria-label="Close">×</button>
+                    </div>
+                    <form
+                      className="contracts-modal-body vendor-edit-form"
+                      onSubmit={(event) => {
+                        event.preventDefault();
+                        if (v.vendorId != null) void updateVendor(v.vendorId)
+                      }}
+                    >
+                      <p className="vendor-edit-help">Update the vendor identity and contact details used across contracts and licenses.</p>
+                      <div className="vendor-edit-fields">
+                        <label>Vendor name<input value={draft.name} onChange={event => { if (v.vendorId != null) updateVendorDraft(v.vendorId, { name: event.target.value }) }} required /></label>
+                        <label>JDE number<input value={draft.vendorJDENumber ?? ''} onChange={event => { if (v.vendorId != null) updateVendorDraft(v.vendorId, { vendorJDENumber: event.target.value || null }) }} /></label>
+                        <label>Contact email<input type="email" value={draft.contactEmail ?? ''} onChange={event => { if (v.vendorId != null) updateVendorDraft(v.vendorId, { contactEmail: event.target.value || null }) }} /></label>
+                        <label>Website<input value={draft.website ?? ''} onChange={event => { if (v.vendorId != null) updateVendorDraft(v.vendorId, { website: event.target.value || null }) }} /></label>
+                        <label className="vendor-edit-wide">Address<input value={draft.address ?? ''} onChange={event => { if (v.vendorId != null) updateVendorDraft(v.vendorId, { address: event.target.value || null }) }} /></label>
+                        <label className="vendor-edit-wide">Comments<textarea value={draft.comments ?? ''} onChange={event => { if (v.vendorId != null) updateVendorDraft(v.vendorId, { comments: event.target.value || null }) }} rows={4} /></label>
+                      </div>
+                      {saveError && <p className="vendor-edit-error">{saveError}</p>}
+                      <div className="vendor-edit-actions">
+                        <button type="button" className="contracts-clear-button" onClick={() => setEditingVendorId(null)}>Cancel</button>
+                        <button type="button" className="vendor-delete-button" disabled={deletingVendorId === v.vendorId} onClick={() => void deleteVendor(v)}>
+                          {deletingVendorId === v.vendorId ? 'Deleting…' : 'Delete vendor'}
+                        </button>
+                        <button type="submit" className="contracts-search-button" disabled={savingVendor}>{savingVendor ? 'Saving…' : 'Save vendor'}</button>
+                      </div>
+                    </form>
+                  </div>
+                </div>
+              )
+            })()}
+
             {isOpen && (
+              <>
               <div className="contracts-table-wrap">
                 <table className="vendor-contract-table contracts-table">
                   <thead>
@@ -465,6 +677,7 @@ export default function VendorsPage() {
                   </tbody>
                 </table>
               </div>
+              </>
             )}
           </div>
         )

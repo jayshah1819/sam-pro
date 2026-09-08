@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { client } from '../api'
-import type { AppData, Contract, ContractLicense, Vendor } from '../types'
+import type { Contract, ContractLicense, Vendor } from '../types'
 import '../styles/contracts.css'
 
 function money(value: number | null) {
@@ -19,13 +19,21 @@ export default function DashboardPage() {
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
-    client.get<AppData>('/app-data')
-      .then(({ data }) => {
-        setContracts(data.contracts ?? [])
-        setLicenses(data.licenses ?? [])
-        setVendors(data.vendors ?? [])
+    Promise.allSettled([
+      client.get<{ content: Contract[] }>('/contracts', { params: { page: 0, size: 500 } }),
+      client.get<ContractLicense[]>('/contracts/licenses/all'),
+      client.get<{ content: Vendor[] }>('/vendors', { params: { page: 0, size: 500 } }),
+    ])
+      .then(([contractResult, licenseResult, vendorResult]) => {
+        const failures: string[] = []
+        if (contractResult.status === 'fulfilled') setContracts(contractResult.value.data.content ?? [])
+        else failures.push('contracts')
+        if (licenseResult.status === 'fulfilled') setLicenses(licenseResult.value.data ?? [])
+        else failures.push('licenses')
+        if (vendorResult.status === 'fulfilled') setVendors(vendorResult.value.data.content ?? [])
+        else failures.push('vendors')
+        if (failures.length) setError(`Failed to load ${failures.join(', ')}.`)
       })
-      .catch(() => setError('Failed to load dashboard data.'))
   }, [])
 
   const cutoff = new Date()
@@ -39,7 +47,7 @@ export default function DashboardPage() {
   const expiringContracts = contracts.filter(contract => contract.endDate >= today && contract.endDate <= cutoffDate)
   const creditCardLicenses = licenses.filter(license => license.paymentMethod === 'CREDIT_CARD')
   const expiredLicenses = licenses.filter(license => license.expiryDate < today)
-  const pendingLicenses = licenses.filter(license => license.status === 'PENDING')
+  const activeLicenses = licenses.filter(license => license.status === 'ACTIVE')
   const seatTotals = Array.from(licenses.reduce((totals, license) => {
     const key = license.licenseName
     totals.set(key, (totals.get(key) ?? 0) + (license.seatsPurchased ?? 0))
@@ -108,8 +116,9 @@ export default function DashboardPage() {
 
       <div className="dashboard-metrics dashboard-license-metrics">
         <div><span>Total licenses</span><strong>{licenses.length}</strong></div>
+         <div><span>Total contracts</span><strong>{contracts.length}</strong></div>
         <div><span>Expired licenses</span><strong>{expiredLicenses.length}</strong></div>
-        <div><span>Pending approval</span><strong>{pendingLicenses.length}</strong></div>
+        <div><span>Active licenses</span><strong>{activeLicenses.length}</strong></div>
       </div>
 
       <div className="dashboard-alert-grid">
