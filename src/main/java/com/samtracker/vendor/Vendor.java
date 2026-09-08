@@ -33,6 +33,10 @@ public class Vendor {
         return tenantId != null ? tenantId : TenantContext.get();
     }
 
+    public void assignTenantId(Long tenantId) {
+        this.tenantId = tenantId;
+    }
+
     @Column(nullable = false)
     private String name;
 

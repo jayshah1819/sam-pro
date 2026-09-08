@@ -2,71 +2,93 @@ package com.samtracker.vendor;
 
 import com.samtracker.tenant.TenantContext;
 import jakarta.persistence.EntityManager;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.http.HttpStatus;
-import org.springframework.stereotype.Service;
-import org.springframework.web.server.ResponseStatusException;
-import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.stereotype.Service;
+import org.springframework.web.server.ResponseStatusException;
 
+import java.sql.ResultSet;
+import java.sql.SQLException;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
 
+// Hibernate's DISCRIMINATOR multi-tenancy binds the current tenant identifier once
+// per request session, so JPA queries can't be redirected to another tenant mid-request
+// even via TenantContext.set(). Admin cross-tenant access therefore goes through
+// JdbcTemplate (raw SQL), which bypasses that filter entirely.
 @Service
 public class VendorService {
     private final VendorRepository vendorRepository;
     private final EntityManager entityManager;
+    private final JdbcTemplate jdbcTemplate;
 
-    public VendorService(VendorRepository vendorRepository, EntityManager entityManager) {
+    public VendorService(VendorRepository vendorRepository, EntityManager entityManager, JdbcTemplate jdbcTemplate) {
         this.vendorRepository = vendorRepository;
         this.entityManager = entityManager;
+        this.jdbcTemplate = jdbcTemplate;
     }
 
     public Page<Vendor> findAll(Pageable pageable) {
         Pageable capped = PageRequest.of(pageable.getPageNumber(), Math.min(pageable.getPageSize(), 500),
                 pageable.getSort());
-        return isCurrentUserAdmin()
-                ? vendorRepository.findAll(capped)
-                : vendorRepository.findByTenantId(TenantContext.get(), capped);
+        if (isCurrentUserAdmin()) {
+            return findAllAdmin(capped);
+        }
+        return vendorRepository.findByTenantId(TenantContext.get(), capped);
+    }
+
+    private Page<Vendor> findAllAdmin(Pageable pageable) {
+        long total = queryLong("SELECT COUNT(*) FROM vendors");
+        List<Vendor> rows = jdbcTemplate.query(
+                "SELECT * FROM vendors ORDER BY vendor_id LIMIT ? OFFSET ?",
+                this::mapVendorRow, pageable.getPageSize(), pageable.getOffset());
+        return new PageImpl<>(rows, pageable, total);
     }
 
     public Page<Vendor> findByNameContains(String name, Pageable pageable) {
         Pageable capped = PageRequest.of(pageable.getPageNumber(), Math.min(pageable.getPageSize(), 500),
                 pageable.getSort());
         if (isCurrentUserAdmin()) {
-            String needle = name == null ? "" : name.trim().toLowerCase();
-            List<Vendor> matches = vendorRepository.findAll().stream()
-                    .filter(vendor -> needle.isBlank()
-                            || String.valueOf(vendor.getVendorId()).contains(needle)
-                            || vendor.getName().toLowerCase().contains(needle)
-                            || (vendor.getVendorJDENumber() != null
-                                    && vendor.getVendorJDENumber().toLowerCase().contains(needle))
-                            || (vendor.getContactEmail() != null
-                                    && vendor.getContactEmail().toLowerCase().contains(needle)))
-                    .toList();
-            int start = (int) Math.min(capped.getOffset(), matches.size());
-            int end = Math.min(start + capped.getPageSize(), matches.size());
-            return new org.springframework.data.domain.PageImpl<>(matches.subList(start, end), capped,
-                    matches.size());
+            return findByNameContainsAdmin(name, capped);
         }
         return vendorRepository.searchByTenantId(TenantContext.get(), name == null ? "" : name.trim(), capped);
     }
 
+    private Page<Vendor> findByNameContainsAdmin(String name, Pageable pageable) {
+        String needle = "%" + (name == null ? "" : name.trim()) + "%";
+        long total = jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM vendors WHERE name LIKE ? OR vendor_jde_number LIKE ? OR contact_email LIKE ?",
+                Long.class, needle, needle, needle);
+        List<Vendor> rows = jdbcTemplate.query(
+                "SELECT * FROM vendors WHERE name LIKE ? OR vendor_jde_number LIKE ? OR contact_email LIKE ? "
+                        + "ORDER BY vendor_id LIMIT ? OFFSET ?",
+                this::mapVendorRow, needle, needle, needle, pageable.getPageSize(), pageable.getOffset());
+        return new PageImpl<>(rows, pageable, total);
+    }
+
     public Vendor findById(Integer vendorId) {
         if (isCurrentUserAdmin()) {
-            Long targetTenant = resolveVendorTenant(vendorId);
-            if (targetTenant == null) {
-                throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Vendor not found");
-            }
-            return vendorRepository.findByTenantIdAndVendorId(targetTenant, vendorId)
-                    .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Vendor not found"));
+            return findByIdAdmin(vendorId);
         }
         return vendorRepository.findByTenantIdAndVendorId(TenantContext.get(), vendorId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Vendor not found"));
+    }
+
+    private Vendor findByIdAdmin(Integer vendorId) {
+        List<Vendor> rows = jdbcTemplate.query("SELECT * FROM vendors WHERE vendor_id = ?", this::mapVendorRow,
+                vendorId);
+        if (rows.isEmpty()) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Vendor not found");
+        }
+        return rows.get(0);
     }
 
     public Vendor create(Vendor vendor) {
@@ -80,23 +102,34 @@ public class VendorService {
     }
 
     public Vendor update(Integer vendorId, Vendor updates) {
-        Long targetTenant = isCurrentUserAdmin()
-                ? resolveVendorTenant(vendorId)
-                : TenantContext.get();
-        if (targetTenant == null) {
+        if (isCurrentUserAdmin()) {
+            return updateAdmin(vendorId, updates);
+        }
+        return updateInTenant(vendorId, updates);
+    }
+
+    private Vendor updateAdmin(Integer vendorId, Vendor updates) {
+        int updated = jdbcTemplate.update("""
+                UPDATE vendors
+                SET name = ?, vendor_jde_number = ?, canonical_name = ?, contact_email = ?, address = ?, website = ?, comments = ?
+                WHERE vendor_id = ?
+                """,
+                blankToNull(updates.getName()),
+                blankToNull(updates.getVendorJDENumber()),
+                blankToNull(updates.getCanonicalName()),
+                blankToNull(updates.getContactEmail()),
+                blankToNull(updates.getAddress()),
+                blankToNull(updates.getWebsite()),
+                blankToNull(updates.getComments()),
+                vendorId);
+        if (updated == 0) {
             throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Vendor not found");
         }
-        Long previousTenant = TenantContext.get();
-        try {
-            TenantContext.set(targetTenant);
-            return updateInTenant(vendorId, updates);
-        } finally {
-            if (previousTenant == null) {
-                TenantContext.clear();
-            } else {
-                TenantContext.set(previousTenant);
-            }
-        }
+        return findByIdAdmin(vendorId);
+    }
+
+    private String blankToNull(String value) {
+        return value == null || value.isBlank() ? null : value.trim();
     }
 
     private Vendor updateInTenant(Integer vendorId, Vendor updates) {
@@ -180,15 +213,15 @@ public class VendorService {
     }
 
     public void delete(Integer vendorId) {
-        Long targetTenant = isCurrentUserAdmin() ? resolveVendorTenant(vendorId) : TenantContext.get();
-        if (targetTenant == null) {
-            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Vendor not found");
+        if (isCurrentUserAdmin()) {
+            deleteAdmin(vendorId);
+            return;
         }
-        Vendor existing = vendorRepository.findByTenantIdAndVendorId(targetTenant, vendorId)
+        Vendor existing = vendorRepository.findByTenantIdAndVendorId(TenantContext.get(), vendorId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Vendor not found"));
         Number contractCount = (Number) entityManager.createNativeQuery(
                 "SELECT COUNT(*) FROM contracts WHERE tenant_id = :tenantId AND vendor_id = :vendorId")
-                .setParameter("tenantId", targetTenant)
+                .setParameter("tenantId", TenantContext.get())
                 .setParameter("vendorId", vendorId)
                 .getSingleResult();
         if (contractCount.longValue() > 0) {
@@ -204,6 +237,24 @@ public class VendorService {
         }
     }
 
+    private void deleteAdmin(Integer vendorId) {
+        long contractCount = jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM contracts WHERE vendor_id = ?", Long.class, vendorId);
+        if (contractCount > 0) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT,
+                    "Vendor cannot be deleted while it has contracts");
+        }
+        try {
+            int deleted = jdbcTemplate.update("DELETE FROM vendors WHERE vendor_id = ?", vendorId);
+            if (deleted == 0) {
+                throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Vendor not found");
+            }
+        } catch (DataIntegrityViolationException exception) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT,
+                    "Vendor cannot be deleted while it has contracts or licenses", exception);
+        }
+    }
+
     public Map<Integer, Long> findSoftwareCounts() {
         return vendorRepository.countSoftwareByVendor(TenantContext.get()).stream()
                 .collect(Collectors.toMap(row -> (Integer) row[0], row -> (Long) row[1]));
@@ -212,4 +263,24 @@ public class VendorService {
     public List<VendorDuplicatePair> findPossibleDuplicates() {
         return List.of();
     }
+
+    private long queryLong(String sql) {
+        Long value = jdbcTemplate.queryForObject(sql, Long.class);
+        return value == null ? 0 : value;
+    }
+
+    private Vendor mapVendorRow(ResultSet rs, int rowNum) throws SQLException {
+        Vendor vendor = new Vendor();
+        vendor.setVendorId((Integer) rs.getObject("vendor_id"));
+        vendor.assignTenantId(rs.getLong("tenant_id"));
+        vendor.setName(rs.getString("name"));
+        vendor.setVendorJDENumber(rs.getString("vendor_jde_number"));
+        vendor.setCanonicalName(rs.getString("canonical_name"));
+        vendor.setContactEmail(rs.getString("contact_email"));
+        vendor.setAddress(rs.getString("address"));
+        vendor.setWebsite(rs.getString("website"));
+        vendor.setComments(rs.getString("comments"));
+        return vendor;
+    }
 }
+
