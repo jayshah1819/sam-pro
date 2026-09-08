@@ -109,11 +109,12 @@ public class VendorService {
     }
 
     private Vendor updateAdmin(Integer vendorId, Vendor updates) {
-        int updated = jdbcTemplate.update("""
-                UPDATE vendors
-                SET name = ?, vendor_jde_number = ?, canonical_name = ?, contact_email = ?, address = ?, website = ?, comments = ?
-                WHERE vendor_id = ?
-                """,
+        int updated = jdbcTemplate.update(
+                """
+                        UPDATE vendors
+                        SET name = ?, vendor_jde_number = ?, canonical_name = ?, contact_email = ?, address = ?, website = ?, comments = ?
+                        WHERE vendor_id = ?
+                        """,
                 blankToNull(updates.getName()),
                 blankToNull(updates.getVendorJDENumber()),
                 blankToNull(updates.getCanonicalName()),
@@ -283,4 +284,3 @@ public class VendorService {
         return vendor;
     }
 }
-

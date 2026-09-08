@@ -285,27 +285,31 @@ public class ContractService {
 
     private List<ContractLicenseView> findLicensesRaw(Long tenantId, Integer contractId) {
         requireContractRaw(tenantId, contractId);
-        return jdbcTemplate.query("""
-                SELECT e.license_id, e.contract_id, e.license_name, e.it_owner, e.comments, e.software_id,
-                       s.vendor AS vendor_name, s.name AS software_name, s.version,
-                       e.license_type, e.status, e.payment_method, e.seats_purchased, e.price, e.start_date, e.expiry_date
-                FROM entitlements e
-                JOIN software_products s ON s.software_id = e.software_id AND s.tenant_id = e.tenant_id
-                WHERE e.tenant_id = ? AND e.contract_id = ?
-                """, this::mapLicenseRow, tenantId, contractId);
+        return jdbcTemplate.query(
+                """
+                        SELECT e.license_id, e.contract_id, e.license_name, e.it_owner, e.comments, e.software_id,
+                               s.vendor AS vendor_name, s.name AS software_name, s.version,
+                               e.license_type, e.status, e.payment_method, e.seats_purchased, e.price, e.start_date, e.expiry_date
+                        FROM entitlements e
+                        JOIN software_products s ON s.software_id = e.software_id AND s.tenant_id = e.tenant_id
+                        WHERE e.tenant_id = ? AND e.contract_id = ?
+                        """,
+                this::mapLicenseRow, tenantId, contractId);
     }
 
     public List<ContractLicenseView> findAllLicensesForCurrentUser() {
         if (isCurrentUserAdmin()) {
-            return jdbcTemplate.query("""
-                    SELECT e.license_id, e.contract_id, e.license_name, e.it_owner, e.comments, e.software_id,
-                           s.vendor AS vendor_name, s.name AS software_name, s.version,
-                           e.license_type, e.status, e.payment_method, e.seats_purchased, e.price, e.start_date, e.expiry_date
-                    FROM entitlements e
-                    JOIN software_products s ON s.software_id = e.software_id AND s.tenant_id = e.tenant_id
-                    ORDER BY e.license_id DESC
-                    LIMIT 10000
-                    """, this::mapLicenseRow);
+            return jdbcTemplate.query(
+                    """
+                            SELECT e.license_id, e.contract_id, e.license_name, e.it_owner, e.comments, e.software_id,
+                                   s.vendor AS vendor_name, s.name AS software_name, s.version,
+                                   e.license_type, e.status, e.payment_method, e.seats_purchased, e.price, e.start_date, e.expiry_date
+                            FROM entitlements e
+                            JOIN software_products s ON s.software_id = e.software_id AND s.tenant_id = e.tenant_id
+                            ORDER BY e.license_id DESC
+                            LIMIT 10000
+                            """,
+                    this::mapLicenseRow);
         }
         Long tenantId = TenantContext.get();
         return entitlementRepository.findByTenantId(tenantId, PageRequest.of(0, 10000)).getContent().stream()
@@ -386,7 +390,8 @@ public class ContractService {
 
         String status = (request.status() == null ? com.samtracker.entitlement.LicenseStatus.ACTIVE : request.status())
                 .name();
-        String paymentMethod = (request.paymentMethod() == null ? com.samtracker.entitlement.PaymentMethod.PURCHASE_ORDER
+        String paymentMethod = (request.paymentMethod() == null
+                ? com.samtracker.entitlement.PaymentMethod.PURCHASE_ORDER
                 : request.paymentMethod()).name();
 
         jdbcTemplate.update("""
@@ -467,7 +472,8 @@ public class ContractService {
         Integer softwareId = findOrCreateSoftwareRaw(tenantId, softwareName, vendorName, request.version());
         String status = (request.status() == null ? com.samtracker.entitlement.LicenseStatus.ACTIVE : request.status())
                 .name();
-        String paymentMethod = (request.paymentMethod() == null ? com.samtracker.entitlement.PaymentMethod.PURCHASE_ORDER
+        String paymentMethod = (request.paymentMethod() == null
+                ? com.samtracker.entitlement.PaymentMethod.PURCHASE_ORDER
                 : request.paymentMethod()).name();
 
         jdbcTemplate.update("""
@@ -739,14 +745,16 @@ public class ContractService {
     }
 
     private ContractLicenseView findLicenseByIdRaw(Long tenantId, Integer licenseId) {
-        List<ContractLicenseView> rows = jdbcTemplate.query("""
-                SELECT e.license_id, e.contract_id, e.license_name, e.it_owner, e.comments, e.software_id,
-                       s.vendor AS vendor_name, s.name AS software_name, s.version,
-                       e.license_type, e.status, e.payment_method, e.seats_purchased, e.price, e.start_date, e.expiry_date
-                FROM entitlements e
-                JOIN software_products s ON s.software_id = e.software_id AND s.tenant_id = e.tenant_id
-                WHERE e.tenant_id = ? AND e.license_id = ?
-                """, this::mapLicenseRow, tenantId, licenseId);
+        List<ContractLicenseView> rows = jdbcTemplate.query(
+                """
+                        SELECT e.license_id, e.contract_id, e.license_name, e.it_owner, e.comments, e.software_id,
+                               s.vendor AS vendor_name, s.name AS software_name, s.version,
+                               e.license_type, e.status, e.payment_method, e.seats_purchased, e.price, e.start_date, e.expiry_date
+                        FROM entitlements e
+                        JOIN software_products s ON s.software_id = e.software_id AND s.tenant_id = e.tenant_id
+                        WHERE e.tenant_id = ? AND e.license_id = ?
+                        """,
+                this::mapLicenseRow, tenantId, licenseId);
         if (rows.isEmpty()) {
             throw new ResponseStatusException(HttpStatus.NOT_FOUND, "License not found");
         }

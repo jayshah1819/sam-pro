@@ -25,7 +25,8 @@ public class SoftwareProductService {
 
     public Page<SoftwareProduct> findAll(Pageable pageable) {
         Pageable capped = capped(pageable, 500);
-        return isCurrentUserAdmin() ? repository.findAll(capped) : repository.findByTenantId(TenantContext.get(), capped);
+        return isCurrentUserAdmin() ? repository.findAll(capped)
+                : repository.findByTenantId(TenantContext.get(), capped);
     }
 
     public Page<SoftwareProduct> findByVendorName(String vendorName, Pageable pageable) {
