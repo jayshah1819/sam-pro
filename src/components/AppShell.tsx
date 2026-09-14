@@ -12,6 +12,7 @@ const NAV_ITEMS: NavItem[] = [
   { label: 'Contracts',    path: '/contracts',    roles: ['VIEWER', 'EDITOR', 'ADMIN'] },
   { label: 'Vendors',      path: '/vendors',      roles: ['VIEWER', 'EDITOR', 'ADMIN'] },
   { label: 'Licenses',     path: '/licenses',     roles: ['VIEWER', 'EDITOR', 'ADMIN'] },
+  { label: 'Departments',  path: '/departments',  roles: ['VIEWER', 'EDITOR', 'ADMIN'] },
   { label: 'Users',        path: '/users',        roles: ['ADMIN'] },
 ]
 

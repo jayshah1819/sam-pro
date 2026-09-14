@@ -1,4 +1,5 @@
 import { Fragment, useEffect, useMemo, useState, type FormEvent } from 'react'
+import { createPortal } from 'react-dom'
 import { useSearchParams } from 'react-router-dom'
 import { client } from '../api'
 import type { Contract, ContractLicense, SpringPage, Vendor } from '../types'
@@ -10,6 +11,16 @@ const PAGE_SIZE = 20
 function fmtCurrency(v: number | null) {
   if (v == null) return '—'
   return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(v)
+}
+
+function extractErrorMessage(err: any, fallback: string): string {
+  const data = err?.response?.data
+  if (Array.isArray(data?.errors) && data.errors.length > 0) {
+    return data.errors
+      .map((fieldError: any) => `${fieldError.field ?? 'field'}: ${fieldError.defaultMessage ?? 'is invalid'}`)
+      .join('; ')
+  }
+  return typeof data?.message === 'string' ? data.message : fallback
 }
 
 function statusBadge(status: Contract['status']) {
@@ -31,12 +42,13 @@ function statusBadge(status: Contract['status']) {
 type ContractForm = {
   contractNumber: string
   itOwner: string
+  businessOwner: string
   comments: string
   vendorName: string
   vendorJDENumber: string
   vendorContactEmail: string
   vendorWebsite: string
-  department: string
+  location: string
   softwareName: string
   startDate: string
   endDate: string
@@ -47,6 +59,7 @@ type ContractForm = {
 type LicenseForm = {
   licenseName: string
   itOwner: string
+  businessOwner: string
   comments: string
   softwareName: string
   version: string
@@ -62,12 +75,13 @@ type LicenseForm = {
 const EMPTY_FORM: ContractForm = {
   contractNumber: '',
   itOwner: '',
+  businessOwner: '',
   comments: '',
   vendorName: '',
   vendorJDENumber: '',
   vendorContactEmail: '',
   vendorWebsite: '',
-  department: '',
+  location: '',
   softwareName: '',
   startDate: '',
   endDate: '',
@@ -78,6 +92,7 @@ const EMPTY_FORM: ContractForm = {
 const EMPTY_LICENSE_FORM: LicenseForm = {
   licenseName: '',
   itOwner: '',
+  businessOwner: '',
   comments: '',
   softwareName: '',
   version: '',
@@ -105,13 +120,16 @@ export default function ContractsPage() {
   const [vendorPickerOpen, setVendorPickerOpen] = useState(false)
   const [saveError, setSaveError] = useState<string | null>(null)
   const [addForm, setAddForm] = useState<ContractForm>(EMPTY_FORM)
+  const [addFormVendorId, setAddFormVendorId] = useState<number | null>(null)
   const [vendorOptions, setVendorOptions] = useState<Vendor[]>([])
 
   const [editingId, setEditingId] = useState<number | null>(null)
   const [editForm, setEditForm] = useState<ContractForm>(EMPTY_FORM)
+  const [editFormVendorId, setEditFormVendorId] = useState<number | null>(null)
   const [savingEdit, setSavingEdit] = useState(false)
 
   const [deletingId, setDeletingId] = useState<number | null>(null)
+  const [newContractIds, setNewContractIds] = useState<Set<number>>(new Set())
   const [openLicensesId, setOpenLicensesId] = useState<number | null>(null)
   const [licensesByContract, setLicensesByContract] = useState<Record<number, ContractLicense[]>>({})
   const [loadingLicensesId, setLoadingLicensesId] = useState<number | null>(null)
@@ -124,6 +142,17 @@ export default function ContractsPage() {
   function handleSearchChange(value: string) {
     setSearch(value)
     setPage(0)
+  }
+
+  function markNew(id: number) {
+    setNewContractIds(prev => new Set(prev).add(id))
+    setTimeout(() => {
+      setNewContractIds(prev => {
+        const next = new Set(prev)
+        next.delete(id)
+        return next
+      })
+    }, 4000)
   }
 
   useEffect(() => {
@@ -165,6 +194,7 @@ export default function ContractsPage() {
 
   function updateAddVendorName(name: string) {
     const vendor = findVendorOption(name)
+    setAddFormVendorId(vendor?.vendorId ?? null)
     setAddForm(f => ({
       ...f,
       vendorName: name,
@@ -174,6 +204,7 @@ export default function ContractsPage() {
 
   function updateEditVendorName(name: string) {
     const vendor = findVendorOption(name)
+    setEditFormVendorId(vendor?.vendorId ?? null)
     setEditForm(f => ({
       ...f,
       vendorName: name,
@@ -183,11 +214,15 @@ export default function ContractsPage() {
 
   async function handleCreateContract(e: FormEvent<HTMLFormElement>) {
     e.preventDefault()
+    if (!addForm.contractNumber.trim() || !addForm.startDate || !addForm.endDate) {
+      setSaveError('Contract number, start date, and end date are required.')
+      return
+    }
     setSaving(true)
     setSaveError(null)
     try {
       const existingVendor = findVendorOption(addForm.vendorName)
-      let vendorId = existingVendor?.vendorId
+      let vendorId = addFormVendorId ?? existingVendor?.vendorId
       if (vendorId == null) {
         const { data: createdVendor } = await client.post<Vendor>('/vendors', {
           name: addForm.vendorName.trim(),
@@ -199,27 +234,29 @@ export default function ContractsPage() {
         if (vendorId == null) throw new Error('Vendor ID was not returned')
         setVendorOptions(prev => [createdVendor, ...prev])
       }
-      await client.post('/contracts', {
+      const { data: createdContract } = await client.post<Contract>('/contracts', {
         contractNumber: addForm.contractNumber.trim(),
         itOwner: addForm.itOwner.trim() || null,
+        businessOwner: addForm.businessOwner.trim() || null,
         comments: addForm.comments.trim() || null,
         vendorId,
-        department: addForm.department.trim() || null,
+        location: addForm.location.trim() || null,
         softwareName: addForm.softwareName.trim() || null,
         startDate: addForm.startDate,
         endDate: addForm.endDate,
         status: addForm.status,
         value: addForm.value.trim() ? Number(addForm.value) : null,
       })
+      markNew(createdContract.id)
       setAddForm(EMPTY_FORM)
+      setAddFormVendorId(null)
       setAddingNewVendor(false)
       setVendorPickerOpen(false)
       setAddModalOpen(false)
       setPage(0)
       setReloadTick(t => t + 1)
     } catch (err: any) {
-      const message = err?.response?.data?.message
-      setSaveError(typeof message === 'string' ? message : 'Failed to save contract.')
+      setSaveError(extractErrorMessage(err, 'Failed to save contract.'))
     } finally {
       setSaving(false)
     }
@@ -227,15 +264,17 @@ export default function ContractsPage() {
 
   function startEdit(c: Contract) {
     setEditingId(c.id)
+    setEditFormVendorId(c.vendorId ?? null)
     setEditForm({
       contractNumber: c.contractNumber,
       itOwner: c.itOwner ?? '',
+      businessOwner: c.businessOwner ?? '',
       comments: c.comments ?? '',
       vendorName: c.vendorName ?? c.vendor.name,
       vendorJDENumber: c.vendorJDENumber ?? c.vendor.vendorJDENumber ?? '',
       vendorContactEmail: '',
       vendorWebsite: '',
-      department: c.department ?? '',
+      location: c.location ?? '',
       softwareName: c.softwareName ?? '',
       startDate: c.startDate,
       endDate: c.endDate,
@@ -247,21 +286,35 @@ export default function ContractsPage() {
 
   function cancelEdit() {
     setEditingId(null)
+    setEditFormVendorId(null)
     setEditForm(EMPTY_FORM)
   }
 
   async function saveEdit(id: number) {
+    if (!editForm.contractNumber.trim() || !editForm.startDate || !editForm.endDate) {
+      setSaveError('Contract number, start date, and end date are required.')
+      return
+    }
     setSavingEdit(true)
     setSaveError(null)
     try {
-      const vendorId = findVendorOption(editForm.vendorName)?.vendorId
-      if (vendorId == null) throw new Error('Choose an existing vendor before updating the contract')
+      let vendorId = editFormVendorId ?? findVendorOption(editForm.vendorName)?.vendorId
+      if (vendorId == null) {
+        const { data: createdVendor } = await client.post<Vendor>('/vendors', {
+          name: editForm.vendorName.trim(),
+          vendorJDENumber: editForm.vendorJDENumber.trim() || null,
+        })
+        vendorId = createdVendor.vendorId ?? undefined
+        if (vendorId == null) throw new Error('Vendor ID was not returned')
+        setVendorOptions(prev => [createdVendor, ...prev])
+      }
       await client.put(`/contracts/${id}`, {
         contractNumber: editForm.contractNumber.trim(),
         itOwner: editForm.itOwner.trim() || null,
+        businessOwner: editForm.businessOwner.trim() || null,
         comments: editForm.comments.trim() || null,
         vendorId,
-        department: editForm.department.trim() || null,
+        location: editForm.location.trim() || null,
         softwareName: editForm.softwareName.trim() || null,
         startDate: editForm.startDate,
         endDate: editForm.endDate,
@@ -271,8 +324,7 @@ export default function ContractsPage() {
       cancelEdit()
       setReloadTick(t => t + 1)
     } catch (err: any) {
-      const message = err?.response?.data?.message
-      setSaveError(typeof message === 'string' ? message : 'Failed to update contract.')
+      setSaveError(extractErrorMessage(err, 'Failed to update contract.'))
     } finally {
       setSavingEdit(false)
     }
@@ -325,6 +377,7 @@ export default function ContractsPage() {
       const { data } = await client.post<ContractLicense>(`/contracts/${contractId}/licenses`, {
         licenseName: licenseForm.licenseName.trim(),
         itOwner: licenseForm.itOwner.trim() || null,
+        businessOwner: licenseForm.businessOwner.trim() || null,
         comments: licenseForm.comments.trim() || null,
         softwareName: licenseForm.softwareName.trim(),
         version: licenseForm.version.trim() || null,
@@ -355,6 +408,7 @@ export default function ContractsPage() {
     setLicenseForm({
       licenseName: license.licenseName,
       itOwner: license.itOwner ?? '',
+      businessOwner: license.businessOwner ?? '',
       comments: license.comments ?? '',
       softwareName: license.softwareName,
       version: license.version === 'default' ? '' : license.version,
@@ -386,6 +440,7 @@ export default function ContractsPage() {
       const { data } = await client.put<ContractLicense>(`/contracts/${contractId}/licenses/${editingLicenseId}`, {
         licenseName: licenseForm.licenseName.trim(),
         itOwner: licenseForm.itOwner.trim() || null,
+        businessOwner: licenseForm.businessOwner.trim() || null,
         comments: licenseForm.comments.trim() || null,
         softwareName: licenseForm.softwareName.trim(),
         version: licenseForm.version.trim() || null,
@@ -441,7 +496,8 @@ export default function ContractsPage() {
       Vendor: contract.vendorName ?? contract.vendor?.name ?? '',
       'Vendor JDE': contract.vendorJDENumber ?? contract.vendor?.vendorJDENumber ?? '',
       'IT owner': contract.itOwner ?? '',
-      Department: contract.department ?? '',
+      'Business owner': contract.businessOwner ?? '',
+      Company: contract.location ?? '',
       Software: contract.softwareName ?? '',
       Start: contract.startDate,
       End: contract.endDate,
@@ -474,167 +530,235 @@ export default function ContractsPage() {
           <button type="button" className="contracts-add-button" onClick={() => { setSaveError(null); setAddModalOpen(true) }}>
             + Add contract
           </button>
-          {addModalOpen && (
+          {addModalOpen && createPortal(
             <div className="contracts-modal-overlay" role="presentation" onMouseDown={event => { if (event.target === event.currentTarget) setAddModalOpen(false) }}>
               <div className="contracts-modal" role="dialog" aria-modal="true" aria-labelledby="add-contract-title">
                 <div className="contracts-modal-head">
-                  <h2 id="add-contract-title">Add contract</h2>
+                  <div>
+                    <h2 id="add-contract-title">Add contract</h2>
+                    <p className="contracts-modal-subtitle">Link a vendor and set the contract term.</p>
+                  </div>
                   <button type="button" className="contracts-modal-close" onClick={() => setAddModalOpen(false)} aria-label="Close">×</button>
                 </div>
-                <div className="contracts-modal-body">
-            <form onSubmit={handleCreateContract} className="contracts-modal-form grid gap-2 md:grid-cols-3">
-              <input
-                value={addForm.contractNumber}
-                onChange={e => setAddForm(f => ({ ...f, contractNumber: e.target.value }))}
-                required
-                placeholder="Contract number"
-                className="h-9 px-3 rounded-lg border border-[#e5e4e7] text-sm text-[#08060d] outline-none focus:border-[#aa3bff]"
-              />
-              <div className="vendor-picker">
-                <input
-                  value={addForm.vendorName}
-                  onChange={event => {
-                    setAddingNewVendor(false)
-                    setAddForm(f => ({ ...f, vendorName: event.target.value }))
-                    setVendorPickerOpen(true)
-                  }}
-                  onFocus={() => setVendorPickerOpen(true)}
-                  onBlur={() => window.setTimeout(() => setVendorPickerOpen(false), 120)}
-                  required
-                  placeholder="Search or choose vendor"
-                  className="h-9 px-3 rounded-lg border border-[#e5e4e7] text-sm text-[#08060d] outline-none focus:border-[#2b5a63]"
-                />
-                {vendorPickerOpen && !addingNewVendor && (
-                  <div className="vendor-picker-menu">
-                    {vendorOptions
-                      .filter(vendor => vendor.name.toLowerCase().includes(addForm.vendorName.trim().toLowerCase()))
-                      .slice(0, 12)
-                      .map(vendor => (
-                        <button
-                          type="button"
-                          key={vendor.vendorId ?? vendor.name}
-                          className="vendor-picker-option"
-                          onMouseDown={event => event.preventDefault()}
-                          onClick={() => {
-                            updateAddVendorName(vendor.name)
-                            setAddingNewVendor(false)
-                            setVendorPickerOpen(false)
-                          }}
-                        >
-                          <span>{vendor.name}</span>
-                          <small>{vendor.vendorId != null ? `vendor_id ${vendor.vendorId}` : ''}</small>
-                        </button>
-                      ))}
-                    <button
-                      type="button"
-                      className="vendor-picker-new"
-                      onMouseDown={event => event.preventDefault()}
-                      onClick={() => {
-                        setAddingNewVendor(true)
-                        setVendorPickerOpen(false)
-                        setAddForm(f => ({ ...f, vendorName: '', vendorJDENumber: '', vendorContactEmail: '', vendorWebsite: '' }))
-                      }}
-                    >
-                      + Create new vendor
-                    </button>
+                <form onSubmit={handleCreateContract}>
+                  <div className="contracts-modal-body">
+                    <section className="contracts-field-section">
+                      <h3 className="contracts-field-section-title">Contract</h3>
+                      <div className="contracts-field-grid">
+                        <label className="contracts-field">
+                          <span>Contract number</span>
+                          <input
+                            value={addForm.contractNumber}
+                            onChange={e => setAddForm(f => ({ ...f, contractNumber: e.target.value }))}
+                            required
+                            placeholder="e.g. CN-2026-014"
+                          />
+                        </label>
+                        <label className="contracts-field">
+                          <span>Software name</span>
+                          <input
+                            value={addForm.softwareName}
+                            onChange={e => setAddForm(f => ({ ...f, softwareName: e.target.value }))}
+                            placeholder="Optional"
+                          />
+                        </label>
+                      </div>
+                    </section>
+
+                    <section className="contracts-field-section">
+                      <h3 className="contracts-field-section-title">Vendor</h3>
+                      <div className="contracts-field-grid">
+                        <label className="contracts-field vendor-picker">
+                          <span>Vendor</span>
+                          <input
+                            value={addForm.vendorName}
+                            onChange={event => {
+                              setAddingNewVendor(false)
+                              setAddFormVendorId(null)
+                              setAddForm(f => ({ ...f, vendorName: event.target.value }))
+                              setVendorPickerOpen(true)
+                            }}
+                            onFocus={() => setVendorPickerOpen(true)}
+                            onBlur={() => window.setTimeout(() => setVendorPickerOpen(false), 120)}
+                            required
+                            placeholder="Search or choose vendor"
+                          />
+                          {vendorPickerOpen && !addingNewVendor && (
+                            <div className="vendor-picker-menu">
+                              {vendorOptions
+                                .filter(vendor => vendor.name.toLowerCase().includes(addForm.vendorName.trim().toLowerCase()))
+                                .slice(0, 12)
+                                .map(vendor => (
+                                  <button
+                                    type="button"
+                                    key={vendor.vendorId ?? vendor.name}
+                                    className="vendor-picker-option"
+                                    onMouseDown={event => event.preventDefault()}
+                                    onClick={() => {
+                                      updateAddVendorName(vendor.name)
+                                      setAddingNewVendor(false)
+                                      setVendorPickerOpen(false)
+                                    }}
+                                  >
+                                    <span>{vendor.name}</span>
+                                    <small>{vendor.vendorId != null ? `vendor_id ${vendor.vendorId}` : ''}</small>
+                                  </button>
+                                ))}
+                              <button
+                                type="button"
+                                className="vendor-picker-new"
+                                onMouseDown={event => event.preventDefault()}
+                                onClick={() => {
+                                  setAddingNewVendor(true)
+                                  setVendorPickerOpen(false)
+                                  setAddFormVendorId(null)
+                                  setAddForm(f => ({ ...f, vendorName: '', vendorJDENumber: '', vendorContactEmail: '', vendorWebsite: '' }))
+                                }}
+                              >
+                                + Create new vendor
+                              </button>
+                            </div>
+                          )}
+                        </label>
+                      </div>
+                      {addingNewVendor && (
+                        <div className="contracts-field-subcard">
+                          <p className="contracts-field-subcard-title">New vendor details</p>
+                          <div className="contracts-field-grid">
+                            <label className="contracts-field">
+                              <span>Vendor name</span>
+                              <input
+                                value={addForm.vendorName}
+                                onChange={e => setAddForm(f => ({ ...f, vendorName: e.target.value }))}
+                                required
+                                placeholder="New vendor name"
+                              />
+                            </label>
+                            <label className="contracts-field">
+                              <span>JDE number</span>
+                              <input
+                                value={addForm.vendorJDENumber}
+                                onChange={e => setAddForm(f => ({ ...f, vendorJDENumber: e.target.value }))}
+                                placeholder="Optional"
+                              />
+                            </label>
+                            <label className="contracts-field">
+                              <span>Contact email</span>
+                              <input
+                                type="email"
+                                value={addForm.vendorContactEmail}
+                                onChange={e => setAddForm(f => ({ ...f, vendorContactEmail: e.target.value }))}
+                                placeholder="Optional"
+                              />
+                            </label>
+                            <label className="contracts-field">
+                              <span>Website</span>
+                              <input
+                                type="url"
+                                value={addForm.vendorWebsite}
+                                onChange={e => setAddForm(f => ({ ...f, vendorWebsite: e.target.value }))}
+                                placeholder="Optional"
+                              />
+                            </label>
+                          </div>
+                        </div>
+                      )}
+                    </section>
+
+                    <section className="contracts-field-section">
+                      <h3 className="contracts-field-section-title">Details</h3>
+                      <div className="contracts-field-grid contracts-field-grid-3">
+                        <label className="contracts-field">
+                          <span>Company</span>
+                          <input value={addForm.location} onChange={e => setAddForm(f => ({ ...f, location: e.target.value }))} placeholder="Optional" />
+                        </label>
+                        <label className="contracts-field">
+                          <span>IT owner</span>
+                          <input value={addForm.itOwner} onChange={e => setAddForm(f => ({ ...f, itOwner: e.target.value }))} placeholder="Optional" />
+                        </label>
+                        <label className="contracts-field">
+                          <span>Business owner</span>
+                          <input value={addForm.businessOwner} onChange={e => setAddForm(f => ({ ...f, businessOwner: e.target.value }))} placeholder="Optional" />
+                        </label>
+                      </div>
+                    </section>
+
+                    <section className="contracts-field-section">
+                      <h3 className="contracts-field-section-title">Term &amp; status</h3>
+                      <div className="contracts-field-grid contracts-field-grid-4">
+                        <label className="contracts-field">
+                          <span>Status</span>
+                          <select
+                            value={addForm.status}
+                            onChange={e => setAddForm(f => ({ ...f, status: e.target.value as Contract['status'] }))}
+                          >
+                            <option value="ACTIVE">Active</option>
+                            <option value="PENDING_RENEWAL">Pending renewal</option>
+                            <option value="EXPIRED">Expired</option>
+                          </select>
+                        </label>
+                        <label className="contracts-field">
+                          <span>Start date</span>
+                          <input
+                            type="date"
+                            value={addForm.startDate}
+                            onChange={e => setAddForm(f => ({ ...f, startDate: e.target.value }))}
+                            onFocus={e => e.currentTarget.showPicker?.()}
+                            required
+                          />
+                        </label>
+                        <label className="contracts-field">
+                          <span>End date</span>
+                          <input
+                            type="date"
+                            value={addForm.endDate}
+                            onChange={e => setAddForm(f => ({ ...f, endDate: e.target.value }))}
+                            onFocus={e => e.currentTarget.showPicker?.()}
+                            required
+                          />
+                        </label>
+                        <label className="contracts-field">
+                          <span>Value</span>
+                          <input
+                            type="number"
+                            value={addForm.value}
+                            onChange={e => setAddForm(f => ({ ...f, value: e.target.value }))}
+                            placeholder="Optional"
+                          />
+                        </label>
+                      </div>
+                    </section>
+
+                    <section className="contracts-field-section">
+                      <label className="contracts-field">
+                        <span>Comments</span>
+                        <textarea value={addForm.comments} onChange={e => setAddForm(f => ({ ...f, comments: e.target.value }))} placeholder="Optional" rows={3} className="contracts-comments-field" />
+                      </label>
+                    </section>
                   </div>
-                )}
+
+                  <div className="contracts-modal-footer">
+                    {saveError && <p className="contracts-modal-error">{saveError}</p>}
+                    <div className="contracts-modal-footer-actions">
+                      <button type="button" className="contracts-clear-button" onClick={() => setAddModalOpen(false)}>Cancel</button>
+                      <button
+                        type="submit"
+                        disabled={saving || !addForm.contractNumber.trim() || !addForm.vendorName.trim() || !addForm.startDate || !addForm.endDate}
+                        className="contracts-modal-submit"
+                      >
+                        {saving ? 'Saving…' : 'Add contract'}
+                      </button>
+                    </div>
+                  </div>
+                </form>
               </div>
-              {addingNewVendor && (
-                <>
-                  <input
-                    value={addForm.vendorName}
-                    onChange={e => setAddForm(f => ({ ...f, vendorName: e.target.value }))}
-                    required
-                    placeholder="New vendor name"
-                    className="h-9 px-3 rounded-lg border border-[#e5e4e7] text-sm text-[#08060d] outline-none focus:border-[#aa3bff]"
-                  />
-                  <input
-                    type="email"
-                    value={addForm.vendorContactEmail}
-                    onChange={e => setAddForm(f => ({ ...f, vendorContactEmail: e.target.value }))}
-                    placeholder="Vendor contact email (optional)"
-                    className="h-9 px-3 rounded-lg border border-[#e5e4e7] text-sm text-[#08060d] outline-none focus:border-[#aa3bff]"
-                  />
-                  <input
-                    type="url"
-                    value={addForm.vendorWebsite}
-                    onChange={e => setAddForm(f => ({ ...f, vendorWebsite: e.target.value }))}
-                    placeholder="Vendor website (optional)"
-                    className="h-9 px-3 rounded-lg border border-[#e5e4e7] text-sm text-[#08060d] outline-none focus:border-[#aa3bff]"
-                  />
-                </>
-              )}
-              <input
-                value={addForm.vendorJDENumber}
-                onChange={e => setAddForm(f => ({ ...f, vendorJDENumber: e.target.value }))}
-                placeholder="Vendor JDE number"
-                className="h-9 px-3 rounded-lg border border-[#e5e4e7] text-sm text-[#08060d] outline-none focus:border-[#aa3bff]"
-              />
-              <input
-                value={addForm.department}
-                onChange={e => setAddForm(f => ({ ...f, department: e.target.value }))}
-                placeholder="Department (optional)"
-                className="h-9 px-3 rounded-lg border border-[#e5e4e7] text-sm text-[#08060d] outline-none focus:border-[#aa3bff]"
-              />
-              <input value={addForm.itOwner} onChange={e => setAddForm(f => ({ ...f, itOwner: e.target.value }))} placeholder="IT owner (optional)" className="h-9 px-3 rounded-lg border border-[#e5e4e7] text-sm text-[#08060d] outline-none focus:border-[#aa3bff]" />
-              <input
-                value={addForm.softwareName}
-                onChange={e => setAddForm(f => ({ ...f, softwareName: e.target.value }))}
-                placeholder="Software name (optional)"
-                className="h-9 px-3 rounded-lg border border-[#e5e4e7] text-sm text-[#08060d] outline-none focus:border-[#aa3bff]"
-              />
-              <select
-                value={addForm.status}
-                onChange={e => setAddForm(f => ({ ...f, status: e.target.value as Contract['status'] }))}
-                className="h-9 px-3 rounded-lg border border-[#e5e4e7] text-sm text-[#08060d] bg-white outline-none focus:border-[#aa3bff]"
-              >
-                <option value="ACTIVE">Active</option>
-                <option value="PENDING_RENEWAL">Pending renewal</option>
-                <option value="EXPIRED">Expired</option>
-              </select>
-              <input
-                type="date"
-                value={addForm.startDate}
-                onChange={e => setAddForm(f => ({ ...f, startDate: e.target.value }))}
-                onFocus={e => e.currentTarget.showPicker?.()}
-                required
-                className="h-9 px-3 rounded-lg border border-[#e5e4e7] text-sm text-[#08060d] outline-none focus:border-[#aa3bff]"
-              />
-              <input
-                type="date"
-                value={addForm.endDate}
-                onChange={e => setAddForm(f => ({ ...f, endDate: e.target.value }))}
-                onFocus={e => e.currentTarget.showPicker?.()}
-                required
-                className="h-9 px-3 rounded-lg border border-[#e5e4e7] text-sm text-[#08060d] outline-none focus:border-[#aa3bff]"
-              />
-              <div className="flex gap-2">
-                <input
-                  type="number"
-                  value={addForm.value}
-                  onChange={e => setAddForm(f => ({ ...f, value: e.target.value }))}
-                  placeholder="Value (optional)"
-                  className="h-9 px-3 rounded-lg border border-[#e5e4e7] text-sm text-[#08060d] outline-none focus:border-[#aa3bff] flex-1"
-                />
-                <button
-                  type="submit"
-                  disabled={saving || !addForm.contractNumber.trim() || !addForm.vendorName.trim() || !addForm.startDate || !addForm.endDate}
-                  className="h-12 px-8 rounded-lg bg-[#08060d] text-white text-base font-semibold hover:bg-[#2a2735] disabled:opacity-40"
-                >
-                  {saving ? 'Saving…' : 'Add'}
-                </button>
-              </div>
-              <textarea value={addForm.comments} onChange={e => setAddForm(f => ({ ...f, comments: e.target.value }))} placeholder="Comments (optional)" rows={3} className="contracts-comments-field" />
-            </form>
-                </div>
-              </div>
-            </div>
+            </div>,
+            document.body,
           )}
         </div>
       </div>
 
-      {saveError && <p className="text-sm text-red-600">{saveError}</p>}
+      {!addModalOpen && addLicenseOpenId == null && editingLicenseId == null && saveError && <p className="text-sm text-red-600">{saveError}</p>}
 
       {loading && <p className="text-sm text-[#6b6375]">Loading…</p>}
       {error && <p className="text-sm text-red-600">{error}</p>}
@@ -669,8 +793,9 @@ export default function ContractsPage() {
                   <th className="text-left px-4 py-3 font-medium text-[#08060d]">Vendor</th>
                   <th className="text-left px-4 py-3 font-medium text-[#08060d]">Vendor JDE</th>
                   <th className="text-left px-4 py-3 font-medium text-[#08060d]">Software</th>
-                  <th className="text-left px-4 py-3 font-medium text-[#08060d]">Department</th>
+                  <th className="text-left px-4 py-3 font-medium text-[#08060d]">Company</th>
                   <th className="text-left px-4 py-3 font-medium text-[#08060d]">IT owner</th>
+                  <th className="text-left px-4 py-3 font-medium text-[#08060d]">Business owner</th>
                   <th className="text-left px-4 py-3 font-medium text-[#08060d]">Start</th>
                   <th className="text-left px-4 py-3 font-medium text-[#08060d]">End</th>
                   <th className="text-left px-4 py-3 font-medium text-[#08060d]">Value</th>
@@ -681,118 +806,138 @@ export default function ContractsPage() {
               <tbody>
                 {visibleContracts.map(c => (
                   editingId === c.id ? (
-                    <tr key={c.id} className="border-b border-[#e5e4e7] last:border-0 bg-[#faf9f7]">
-                      <td className="px-4 py-2">
-                        <input
-                          value={editForm.contractNumber}
-                          onChange={e => setEditForm(f => ({ ...f, contractNumber: e.target.value }))}
-                          className="h-8 w-full px-2 rounded border border-[#e5e4e7] text-xs text-[#08060d]"
-                        />
-                      </td>
-                      <td className="px-4 py-2">
-                        <input
-                          value={editForm.vendorName}
-                          onChange={e => updateEditVendorName(e.target.value)}
-                          list="contract-vendors"
-                          className="h-8 w-full px-2 rounded border border-[#e5e4e7] text-xs text-[#08060d]"
-                        />
-                      </td>
-                      <td className="px-4 py-2">
-                        <input
-                          value={editForm.vendorJDENumber}
-                          onChange={e => setEditForm(f => ({ ...f, vendorJDENumber: e.target.value }))}
-                          className="h-8 w-full px-2 rounded border border-[#e5e4e7] text-xs text-[#08060d]"
-                        />
-                      </td>
-                      <td className="px-4 py-2">
-                        <input
-                          value={editForm.softwareName}
-                          onChange={e => setEditForm(f => ({ ...f, softwareName: e.target.value }))}
-                          className="h-8 w-full px-2 rounded border border-[#e5e4e7] text-xs text-[#08060d]"
-                        />
-                      </td>
-                      <td className="px-4 py-2">
-                        <input
-                          value={editForm.itOwner}
-                          onChange={e => setEditForm(f => ({ ...f, itOwner: e.target.value }))}
-                          placeholder="IT owner"
-                          className="h-8 w-full px-2 rounded border border-[#e5e4e7] text-xs text-[#08060d]"
-                        />
-                        <textarea value={editForm.comments} onChange={e => setEditForm(f => ({ ...f, comments: e.target.value }))} placeholder="Comments" rows={2} className="contracts-comments-field contracts-comments-edit" />
-                        <input
-                          value={editForm.department}
-                          onChange={e => setEditForm(f => ({ ...f, department: e.target.value }))}
-                          placeholder="Department"
-                          className="h-8 w-full px-2 rounded border border-[#e5e4e7] text-xs text-[#08060d]"
-                        />
-                      </td>
-                      <td className="px-4 py-2">
-                        <input
-                          type="date"
-                          value={editForm.startDate}
-                          onChange={e => setEditForm(f => ({ ...f, startDate: e.target.value }))}
-                          onFocus={e => e.currentTarget.showPicker?.()}
-                          className="h-8 w-28 px-2 rounded border border-[#e5e4e7] text-xs text-[#08060d]"
-                        />
-                      </td>
-                      <td className="px-4 py-2">
-                        <input
-                          type="date"
-                          value={editForm.endDate}
-                          onChange={e => setEditForm(f => ({ ...f, endDate: e.target.value }))}
-                          onFocus={e => e.currentTarget.showPicker?.()}
-                          className="h-8 w-28 px-2 rounded border border-[#e5e4e7] text-xs text-[#08060d]"
-                        />
-                      </td>
-                      <td className="px-4 py-2">
-                        <input
-                          type="number"
-                          value={editForm.value}
-                          onChange={e => setEditForm(f => ({ ...f, value: e.target.value }))}
-                          className="h-8 w-24 px-2 rounded border border-[#e5e4e7] text-xs text-[#08060d]"
-                        />
-                      </td>
-                      <td className="px-4 py-2">
-                        <select
-                          value={editForm.status}
-                          onChange={e => setEditForm(f => ({ ...f, status: e.target.value as Contract['status'] }))}
-                          className="h-8 px-2 rounded border border-[#e5e4e7] text-xs text-[#08060d] bg-white"
-                        >
-                          <option value="ACTIVE">Active</option>
-                          <option value="PENDING_RENEWAL">Pending renewal</option>
-                          <option value="EXPIRED">Expired</option>
-                        </select>
-                      </td>
-                      <td className="px-4 py-2 text-xs">
-                        <div className="flex items-center gap-2">
-                          <button
-                            onClick={() => void saveEdit(c.id)}
-                            disabled={savingEdit}
-                            className="px-2 py-1 rounded border border-[#e5e4e7] text-[#08060d] disabled:opacity-40"
+                    <Fragment key={c.id}>
+                      <tr className="contract-edit-row">
+                        <td>
+                          <input
+                            value={editForm.contractNumber}
+                            onChange={e => setEditForm(f => ({ ...f, contractNumber: e.target.value }))}
+                            placeholder="Contract number"
+                          />
+                        </td>
+                        <td>
+                          <input
+                            value={editForm.vendorName}
+                            onChange={e => updateEditVendorName(e.target.value)}
+                            list="contract-vendors"
+                            placeholder="Vendor"
+                          />
+                        </td>
+                        <td>
+                          <input
+                            value={editForm.vendorJDENumber}
+                            onChange={e => setEditForm(f => ({ ...f, vendorJDENumber: e.target.value }))}
+                            readOnly={editFormVendorId != null}
+                            title={editFormVendorId != null ? 'Existing vendor already has a JDE number' : undefined}
+                            className="contract-edit-readonly"
+                          />
+                        </td>
+                        <td>
+                          <input
+                            value={editForm.softwareName}
+                            onChange={e => setEditForm(f => ({ ...f, softwareName: e.target.value }))}
+                            placeholder="Software"
+                          />
+                        </td>
+                        <td>
+                          <input
+                            value={editForm.location}
+                            onChange={e => setEditForm(f => ({ ...f, location: e.target.value }))}
+                            placeholder="Company"
+                          />
+                        </td>
+                        <td>
+                          <input
+                            value={editForm.itOwner}
+                            onChange={e => setEditForm(f => ({ ...f, itOwner: e.target.value }))}
+                            placeholder="IT owner"
+                          />
+                        </td>
+                        <td>
+                          <input
+                            value={editForm.businessOwner}
+                            onChange={e => setEditForm(f => ({ ...f, businessOwner: e.target.value }))}
+                            placeholder="Business owner"
+                          />
+                        </td>
+                        <td>
+                          <input
+                            type="date"
+                            value={editForm.startDate}
+                            onChange={e => setEditForm(f => ({ ...f, startDate: e.target.value }))}
+                            onFocus={e => e.currentTarget.showPicker?.()}
+                          />
+                        </td>
+                        <td>
+                          <input
+                            type="date"
+                            value={editForm.endDate}
+                            onChange={e => setEditForm(f => ({ ...f, endDate: e.target.value }))}
+                            onFocus={e => e.currentTarget.showPicker?.()}
+                          />
+                        </td>
+                        <td>
+                          <input
+                            type="number"
+                            value={editForm.value}
+                            onChange={e => setEditForm(f => ({ ...f, value: e.target.value }))}
+                            placeholder="Value"
+                          />
+                        </td>
+                        <td>
+                          <select
+                            value={editForm.status}
+                            onChange={e => setEditForm(f => ({ ...f, status: e.target.value as Contract['status'] }))}
                           >
-                            Save
-                          </button>
-                          <button
-                            onClick={cancelEdit}
-                            disabled={savingEdit}
-                            className="px-2 py-1 rounded border border-[#e5e4e7] text-[#6b6375] disabled:opacity-40"
-                          >
-                            Cancel
-                          </button>
-                          <button
-                            onClick={() => void deleteContract(c.id)}
-                            disabled={savingEdit || deletingId === c.id}
-                            className="px-2 py-1 rounded border border-red-200 text-red-600 disabled:opacity-40"
-                          >
-                            {deletingId === c.id ? 'Deleting…' : 'Delete'}
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
+                            <option value="ACTIVE">Active</option>
+                            <option value="PENDING_RENEWAL">Pending renewal</option>
+                            <option value="EXPIRED">Expired</option>
+                          </select>
+                        </td>
+                        <td>
+                          <div className="contract-edit-actions">
+                            <button
+                              onClick={() => void saveEdit(c.id)}
+                              disabled={savingEdit}
+                              className="contract-edit-save"
+                            >
+                              {savingEdit ? 'Saving…' : 'Save'}
+                            </button>
+                            <button
+                              onClick={cancelEdit}
+                              disabled={savingEdit}
+                              className="contract-edit-cancel"
+                            >
+                              Cancel
+                            </button>
+                            <button
+                              onClick={() => void deleteContract(c.id)}
+                              disabled={savingEdit || deletingId === c.id}
+                              className="contract-edit-delete"
+                            >
+                              {deletingId === c.id ? 'Deleting…' : 'Delete'}
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                      <tr className="contract-edit-notes-row">
+                        <td colSpan={12}>
+                          <label className="contract-edit-notes-label">
+                            <span>Comments</span>
+                            <textarea
+                              value={editForm.comments}
+                              onChange={e => setEditForm(f => ({ ...f, comments: e.target.value }))}
+                              placeholder="Optional"
+                              rows={2}
+                            />
+                          </label>
+                        </td>
+                      </tr>
+                    </Fragment>
                   ) : (
                     <Fragment key={c.id}>
-                      <tr className="contract-row">
-                        <td><div className="contract-number">{c.contractNumber}</div><div className="contract-subtitle">{c.department || 'Contract'}</div></td>
+                      <tr className={`contract-row${newContractIds.has(c.id) ? ' contract-row-new' : ''}`}>
+                        <td><div className="contract-number">{c.contractNumber}</div><div className="contract-subtitle">{c.location || 'Contract'}</div></td>
                         <td className="px-4 py-3 text-[#08060d]">{c.vendorName ?? c.vendor.name}</td>
                         <td className="px-4 py-3 text-[#6b6375]">{c.vendorJDENumber || c.vendor.vendorJDENumber || '—'}</td>
                         <td className="px-4 py-3">
@@ -803,8 +948,9 @@ export default function ContractsPage() {
                             {(licensesByContract[c.id] ?? []).length === 0 && !c.softwareName && <span className="text-[#6b6375]">—</span>}
                           </div>
                         </td>
-                        <td className="px-4 py-3 text-[#6b6375]">{c.department || '—'}</td>
+                        <td className="px-4 py-3 text-[#6b6375]">{c.location || '—'}</td>
                         <td className="px-4 py-3 text-[#6b6375]">{c.itOwner || '—'}</td>
+                        <td className="px-4 py-3 text-[#6b6375]">{c.businessOwner || '—'}</td>
                         <td className="px-4 py-3 text-[#6b6375]">{c.startDate ?? '—'}</td>
                         <td className="px-4 py-3 text-[#6b6375]">{c.endDate ?? '—'}</td>
                         <td className="px-4 py-3 text-[#08060d]">{fmtCurrency(c.value)}</td>
@@ -832,94 +978,177 @@ export default function ContractsPage() {
                         <tr className="contracts-detail-row">
                           <td colSpan={11} className="px-4 py-4">
                             <div className="flex flex-col gap-3">
-                              {(addLicenseOpenId === c.id || editingLicenseId != null) ? (
-                              <div className="contracts-license-form grid gap-2 md:grid-cols-6">
-                                <input
-                                  value={licenseForm.licenseName}
-                                  onChange={e => setLicenseForm(f => ({ ...f, licenseName: e.target.value }))}
-                                  placeholder="License name (E5, Copilot)"
-                                  className="h-9 px-3 rounded-lg border border-[#e5e4e7] text-sm text-[#08060d] outline-none focus:border-[#aa3bff]"
-                                />
-                                <input value={licenseForm.itOwner} onChange={e => setLicenseForm(f => ({ ...f, itOwner: e.target.value }))} placeholder="IT owner" className="h-9 px-3 rounded-lg border border-[#e5e4e7] text-sm text-[#08060d] outline-none focus:border-[#aa3bff]" />
-                                <input value={licenseForm.comments} onChange={e => setLicenseForm(f => ({ ...f, comments: e.target.value }))} placeholder="Comments" className="h-9 px-3 rounded-lg border border-[#e5e4e7] text-sm text-[#08060d] outline-none focus:border-[#aa3bff]" />
-                                <input
-                                  value={licenseForm.softwareName}
-                                  onChange={e => setLicenseForm(f => ({ ...f, softwareName: e.target.value }))}
-                                  placeholder="Software name"
-                                  className="h-9 px-3 rounded-lg border border-[#e5e4e7] text-sm text-[#08060d] outline-none focus:border-[#aa3bff]"
-                                />
-                                <input
-                                  value={licenseForm.version}
-                                  onChange={e => setLicenseForm(f => ({ ...f, version: e.target.value }))}
-                                  placeholder="Version (optional)"
-                                  className="h-9 px-3 rounded-lg border border-[#e5e4e7] text-sm text-[#08060d] outline-none focus:border-[#aa3bff]"
-                                />
-                                <select
-                                  value={licenseForm.licenseType}
-                                  onChange={e => setLicenseForm(f => ({ ...f, licenseType: e.target.value as ContractLicense['licenseType'] }))}
-                                  className="h-9 px-3 rounded-lg border border-[#e5e4e7] text-sm text-[#08060d] bg-white outline-none focus:border-[#aa3bff]"
+                              <div className="license-add-row">
+                                <button
+                                  type="button"
+                                  onClick={() => { setAddLicenseOpenId(c.id); setEditingLicenseId(null); setLicenseForm({ ...EMPTY_LICENSE_FORM, softwareName: c.softwareName ?? '' }) }}
+                                  className="license-add-button"
                                 >
-                                  <option value="PER_SEAT">Per seat</option>
-                                  <option value="PER_DEVICE">Per device</option>
-                                  <option value="SITE_LICENSE">Site license</option>
-                                  <option value="SUBSCRIPTION">Subscription</option>
-                                </select>
-                                <select value={licenseForm.status} onChange={e => setLicenseForm(f => ({ ...f, status: e.target.value as ContractLicense['status'] }))} className="h-9 px-3 rounded-lg border border-[#e5e4e7] text-sm text-[#08060d] bg-white">
-                                  <option value="ACTIVE">Active</option><option value="PENDING">Pending</option><option value="EXPIRED">Expired</option>
-                                </select>
-                                <select value={licenseForm.paymentMethod} onChange={e => setLicenseForm(f => ({ ...f, paymentMethod: e.target.value as ContractLicense['paymentMethod'] }))} className="h-9 px-3 rounded-lg border border-[#e5e4e7] text-sm text-[#08060d] bg-white">
-                                  <option value="PURCHASE_ORDER">Purchase order</option><option value="CREDIT_CARD">Credit card</option>
-                                </select>
-                                <input type="date" required value={licenseForm.startDate} onChange={e => setLicenseForm(f => ({ ...f, startDate: e.target.value }))} onFocus={e => e.currentTarget.showPicker?.()} className="h-9 px-3 rounded-lg border border-[#e5e4e7] text-sm text-[#08060d]" />
-                                <input type="date" required value={licenseForm.expiryDate} onChange={e => setLicenseForm(f => ({ ...f, expiryDate: e.target.value }))} onFocus={e => e.currentTarget.showPicker?.()} className="h-9 px-3 rounded-lg border border-[#e5e4e7] text-sm text-[#08060d]" />
-                                <input
-                                  type="number"
-                                  value={licenseForm.seatsPurchased}
-                                  onChange={e => setLicenseForm(f => ({ ...f, seatsPurchased: e.target.value }))}
-                                  placeholder="Seats"
-                                  className="h-9 px-3 rounded-lg border border-[#e5e4e7] text-sm text-[#08060d] outline-none focus:border-[#aa3bff]"
-                                />
-                                <input
-                                  type="number"
-                                  min="0"
-                                  step="0.01"
-                                  value={licenseForm.price}
-                                  onChange={e => setLicenseForm(f => ({ ...f, price: e.target.value }))}
-                                  placeholder="Price"
-                                  className="h-9 px-3 rounded-lg border border-[#e5e4e7] text-sm text-[#08060d] outline-none focus:border-[#aa3bff]"
-                                />
-                                <div className="flex gap-2">
-                                  <button
-                                    type="button"
-                                    onClick={() => void saveLicense(c.id)}
-                                    disabled={savingLicense || !licenseForm.licenseName.trim() || !licenseForm.softwareName.trim()}
-                                    className="h-9 px-4 rounded-lg bg-[#08060d] text-white text-sm font-medium hover:bg-[#2a2735] disabled:opacity-40"
-                                  >
-                                    {savingLicense ? 'Saving…' : editingLicenseId == null ? 'Add' : 'Save'}
-                                  </button>
-                                  {editingLicenseId != null && (
-                                    <>
-                                      <button type="button" onClick={cancelEditLicense} className="h-9 px-3 rounded-lg border border-[#e5e4e7] text-sm text-[#6b6375]">
-                                        Cancel
-                                      </button>
-                                      <button type="button" onClick={() => void deleteLicense(c.id, editingLicenseId)} disabled={deletingLicenseId === editingLicenseId} className="h-9 px-3 rounded-lg border border-red-200 text-sm text-red-600 disabled:opacity-40">
-                                        {deletingLicenseId === editingLicenseId ? 'Deleting…' : 'Delete'}
-                                      </button>
-                                    </>
-                                  )}
-                                </div>
+                                  + Add license
+                                </button>
+                                <span className="contracts-license-total">License total: <strong>{fmtCurrency(licenseTotal(c.id))}</strong></span>
                               </div>
-                              ) : (
-                                <div className="license-add-row">
-                                  <button
-                                    type="button"
-                                    onClick={() => { setAddLicenseOpenId(c.id); setEditingLicenseId(null); setLicenseForm({ ...EMPTY_LICENSE_FORM, softwareName: c.softwareName ?? '' }) }}
-                                    className="license-add-button"
-                                  >
-                                    + Add license
-                                  </button>
-                                  <span className="contracts-license-total">License total: <strong>{fmtCurrency(licenseTotal(c.id))}</strong></span>
-                                </div>
+
+                              {(addLicenseOpenId === c.id || editingLicenseId != null) && createPortal(
+                                <div className="contracts-modal-overlay" role="presentation" onMouseDown={event => { if (event.target === event.currentTarget) cancelEditLicense() }}>
+                                  <div className="contracts-modal" role="dialog" aria-modal="true" aria-labelledby={`license-modal-title-${c.id}`}>
+                                    <div className="contracts-modal-head">
+                                      <div>
+                                        <h2 id={`license-modal-title-${c.id}`}>{editingLicenseId == null ? 'Add license' : 'Edit license'}</h2>
+                                        <p className="contracts-modal-subtitle">For contract {c.contractNumber}.</p>
+                                      </div>
+                                      <button type="button" className="contracts-modal-close" onClick={cancelEditLicense} aria-label="Close">×</button>
+                                    </div>
+                                    <form onSubmit={event => { event.preventDefault(); void saveLicense(c.id) }}>
+                                      <div className="contracts-modal-body">
+                                        <section className="contracts-field-section">
+                                          <h3 className="contracts-field-section-title">License</h3>
+                                          <div className="contracts-field-grid">
+                                            <label className="contracts-field">
+                                              <span>License name</span>
+                                              <input
+                                                value={licenseForm.licenseName}
+                                                onChange={e => setLicenseForm(f => ({ ...f, licenseName: e.target.value }))}
+                                                required
+                                                placeholder="e.g. E5, Copilot"
+                                              />
+                                            </label>
+                                            <label className="contracts-field">
+                                              <span>Software name</span>
+                                              <input
+                                                value={licenseForm.softwareName}
+                                                onChange={e => setLicenseForm(f => ({ ...f, softwareName: e.target.value }))}
+                                                required
+                                                placeholder="Software name"
+                                              />
+                                            </label>
+                                            <label className="contracts-field">
+                                              <span>Version</span>
+                                              <input
+                                                value={licenseForm.version}
+                                                onChange={e => setLicenseForm(f => ({ ...f, version: e.target.value }))}
+                                                placeholder="Optional"
+                                              />
+                                            </label>
+                                            <label className="contracts-field">
+                                              <span>License type</span>
+                                              <select
+                                                value={licenseForm.licenseType}
+                                                onChange={e => setLicenseForm(f => ({ ...f, licenseType: e.target.value as ContractLicense['licenseType'] }))}
+                                              >
+                                                <option value="PER_SEAT">Per seat</option>
+                                                <option value="PER_DEVICE">Per device</option>
+                                                <option value="SITE_LICENSE">Site license</option>
+                                                <option value="SUBSCRIPTION">Subscription</option>
+                                              </select>
+                                            </label>
+                                          </div>
+                                        </section>
+
+                                        <section className="contracts-field-section">
+                                          <h3 className="contracts-field-section-title">Ownership</h3>
+                                          <div className="contracts-field-grid">
+                                            <label className="contracts-field">
+                                              <span>IT owner</span>
+                                              <input value={licenseForm.itOwner} onChange={e => setLicenseForm(f => ({ ...f, itOwner: e.target.value }))} placeholder="Optional" />
+                                            </label>
+                                            <label className="contracts-field">
+                                              <span>Business owner</span>
+                                              <input value={licenseForm.businessOwner} onChange={e => setLicenseForm(f => ({ ...f, businessOwner: e.target.value }))} placeholder="Optional" />
+                                            </label>
+                                          </div>
+                                        </section>
+
+                                        <section className="contracts-field-section">
+                                          <h3 className="contracts-field-section-title">Term &amp; payment</h3>
+                                          <div className="contracts-field-grid contracts-field-grid-4">
+                                            <label className="contracts-field">
+                                              <span>Status</span>
+                                              <select value={licenseForm.status} onChange={e => setLicenseForm(f => ({ ...f, status: e.target.value as ContractLicense['status'] }))}>
+                                                <option value="ACTIVE">Active</option>
+                                                <option value="PENDING">Pending</option>
+                                                <option value="EXPIRED">Expired</option>
+                                              </select>
+                                            </label>
+                                            <label className="contracts-field">
+                                              <span>Payment method</span>
+                                              <select value={licenseForm.paymentMethod} onChange={e => setLicenseForm(f => ({ ...f, paymentMethod: e.target.value as ContractLicense['paymentMethod'] }))}>
+                                                <option value="PURCHASE_ORDER">Purchase order</option>
+                                                <option value="CREDIT_CARD">Credit card</option>
+                                              </select>
+                                            </label>
+                                            <label className="contracts-field">
+                                              <span>Start date</span>
+                                              <input type="date" required value={licenseForm.startDate} onChange={e => setLicenseForm(f => ({ ...f, startDate: e.target.value }))} onFocus={e => e.currentTarget.showPicker?.()} />
+                                            </label>
+                                            <label className="contracts-field">
+                                              <span>Expiry date</span>
+                                              <input type="date" required value={licenseForm.expiryDate} onChange={e => setLicenseForm(f => ({ ...f, expiryDate: e.target.value }))} onFocus={e => e.currentTarget.showPicker?.()} />
+                                            </label>
+                                          </div>
+                                        </section>
+
+                                        <section className="contracts-field-section">
+                                          <h3 className="contracts-field-section-title">Seats &amp; price</h3>
+                                          <div className="contracts-field-grid">
+                                            <label className="contracts-field">
+                                              <span>Seats</span>
+                                              <input
+                                                type="number"
+                                                value={licenseForm.seatsPurchased}
+                                                onChange={e => setLicenseForm(f => ({ ...f, seatsPurchased: e.target.value }))}
+                                                placeholder="Optional"
+                                              />
+                                            </label>
+                                            <label className="contracts-field">
+                                              <span>Price</span>
+                                              <input
+                                                type="number"
+                                                min="0"
+                                                step="0.01"
+                                                value={licenseForm.price}
+                                                onChange={e => setLicenseForm(f => ({ ...f, price: e.target.value }))}
+                                                placeholder="Optional"
+                                              />
+                                            </label>
+                                          </div>
+                                        </section>
+
+                                        <section className="contracts-field-section">
+                                          <label className="contracts-field">
+                                            <span>Comments</span>
+                                            <textarea value={licenseForm.comments} onChange={e => setLicenseForm(f => ({ ...f, comments: e.target.value }))} placeholder="Optional" rows={2} className="contracts-comments-field" />
+                                          </label>
+                                        </section>
+                                      </div>
+
+                                      <div className="contracts-modal-footer">
+                                        {saveError && <p className="contracts-modal-error">{saveError}</p>}
+                                        <div className="contracts-modal-footer-actions">
+                                          {editingLicenseId != null && (
+                                            <button
+                                              type="button"
+                                              onClick={() => void deleteLicense(c.id, editingLicenseId)}
+                                              disabled={deletingLicenseId === editingLicenseId}
+                                              className="contract-edit-delete"
+                                            >
+                                              {deletingLicenseId === editingLicenseId ? 'Deleting…' : 'Delete'}
+                                            </button>
+                                          )}
+                                          <button type="button" className="contracts-clear-button" onClick={cancelEditLicense}>Cancel</button>
+                                          <button
+                                            type="submit"
+                                            disabled={savingLicense || !licenseForm.licenseName.trim() || !licenseForm.softwareName.trim()}
+                                            className="contracts-modal-submit"
+                                          >
+                                            {savingLicense ? 'Saving…' : editingLicenseId == null ? 'Add license' : 'Save changes'}
+                                          </button>
+                                        </div>
+                                      </div>
+                                    </form>
+                                  </div>
+                                </div>,
+                                document.body,
                               )}
 
                               {loadingLicensesId === c.id ? (

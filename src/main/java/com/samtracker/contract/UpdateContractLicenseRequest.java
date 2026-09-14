@@ -9,18 +9,19 @@ import java.math.BigDecimal;
 import java.time.LocalDate;
 
 public record UpdateContractLicenseRequest(
-        @NotBlank String licenseName,
-        String itOwner,
-        String comments,
-        @NotBlank String softwareName,
-        String version,
-        @NotNull LicenseType licenseType,
-        LicenseStatus status,
-        PaymentMethod paymentMethod,
-        Integer seatsPurchased,
-        BigDecimal price,
-        Integer contractId,
-        LocalDate startDate,
-        LocalDate expiryDate,
-        Boolean renew) {
+                @NotBlank String licenseName,
+                String itOwner,
+                String businessOwner,
+                String comments,
+                @NotBlank String softwareName,
+                String version,
+                @NotNull LicenseType licenseType,
+                LicenseStatus status,
+                PaymentMethod paymentMethod,
+                Integer seatsPurchased,
+                BigDecimal price,
+                Integer contractId,
+                LocalDate startDate,
+                LocalDate expiryDate,
+                Boolean renew) {
 }

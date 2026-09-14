@@ -71,14 +71,14 @@ public class ContractController {
 
     @PostMapping("/{id}/licenses")
     @ResponseStatus(HttpStatus.CREATED)
-    @PreAuthorize("hasAnyRole('ADMIN','EDITOR','VIEWER')")
+    @PreAuthorize("hasAnyRole('ADMIN','EDITOR')")
     public ContractLicenseView addLicense(@PathVariable Integer id,
             @Valid @RequestBody CreateContractLicenseRequest request) {
         return contractService.addLicense(id, request);
     }
 
     @PutMapping("/{id}/licenses/{licenseId}")
-    @PreAuthorize("hasAnyRole('ADMIN','EDITOR','VIEWER')")
+    @PreAuthorize("hasAnyRole('ADMIN','EDITOR')")
     public ContractLicenseView updateLicense(@PathVariable Integer id, @PathVariable Integer licenseId,
             @Valid @RequestBody UpdateContractLicenseRequest request) {
         return contractService.updateLicense(id, licenseId, request);
@@ -86,7 +86,7 @@ public class ContractController {
 
     @DeleteMapping("/{id}/licenses/{licenseId}")
     @ResponseStatus(HttpStatus.NO_CONTENT)
-    @PreAuthorize("hasAnyRole('ADMIN','EDITOR','VIEWER')")
+    @PreAuthorize("hasRole('ADMIN')")
     public void deleteLicense(@PathVariable Integer id, @PathVariable Integer licenseId) {
         contractService.deleteLicense(id, licenseId);
     }
@@ -134,7 +134,7 @@ public class ContractController {
 
     @PostMapping
     @ResponseStatus(HttpStatus.CREATED)
-    @PreAuthorize("hasAnyRole('ADMIN','EDITOR','USER')")
+    @PreAuthorize("hasAnyRole('ADMIN','EDITOR')")
     public Contract create(@Valid @RequestBody CreateContractRequest request) {
         return contractService.create(request);
     }
@@ -147,7 +147,7 @@ public class ContractController {
 
     @DeleteMapping("/{id}")
     @ResponseStatus(HttpStatus.NO_CONTENT)
-    @PreAuthorize("hasAnyRole('ADMIN','EDITOR')")
+    @PreAuthorize("hasRole('ADMIN')")
     public void delete(@PathVariable Integer id) {
         contractService.delete(id);
     }

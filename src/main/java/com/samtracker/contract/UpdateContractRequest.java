@@ -7,14 +7,15 @@ import java.math.BigDecimal;
 import java.time.LocalDate;
 
 public record UpdateContractRequest(
-        @NotBlank String contractNumber,
-        @NotNull Integer vendorId,
-        String department,
-        String itOwner,
-        String comments,
-        String softwareName,
-        @NotNull LocalDate startDate,
-        @NotNull LocalDate endDate,
-        ContractStatus status,
-        BigDecimal value) {
+                @NotBlank String contractNumber,
+                @NotNull Integer vendorId,
+                String location,
+                String itOwner,
+                String businessOwner,
+                String comments,
+                String softwareName,
+                @NotNull LocalDate startDate,
+                @NotNull LocalDate endDate,
+                ContractStatus status,
+                BigDecimal value) {
 }

@@ -59,6 +59,9 @@ public class Entitlement {
     @Column(name = "it_owner")
     private String itOwner;
 
+    @Column(name = "business_owner")
+    private String businessOwner;
+
     @Enumerated(EnumType.STRING)
     @Column(name = "status", nullable = false)
     private LicenseStatus status = LicenseStatus.ACTIVE;

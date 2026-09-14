@@ -41,7 +41,8 @@ public interface VendorRepository extends JpaRepository<Vendor, Integer> {
                                 OR LOWER(COALESCE(c.contractNumber, '')) LIKE LOWER(CONCAT('%', :q, '%'))
                                 OR LOWER(COALESCE(c.vendorJDENumber, '')) LIKE LOWER(CONCAT('%', :q, '%'))
                                 OR LOWER(COALESCE(c.softwareName, '')) LIKE LOWER(CONCAT('%', :q, '%'))
-                                OR LOWER(COALESCE(c.department, '')) LIKE LOWER(CONCAT('%', :q, '%'))
+                                OR LOWER(COALESCE(c.location, '')) LIKE LOWER(CONCAT('%', :q, '%'))
+                                OR LOWER(COALESCE(c.businessOwner, '')) LIKE LOWER(CONCAT('%', :q, '%'))
                                 OR EXISTS (
                                     SELECT e FROM Entitlement e
                                     WHERE e.tenantId = c.tenantId

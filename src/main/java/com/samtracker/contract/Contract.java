@@ -58,11 +58,14 @@ public class Contract {
     @Column(name = "contract_number", nullable = false)
     private String contractNumber;
 
-    @Column(name = "department")
-    private String department;
+    @Column(name = "location")
+    private String location;
 
     @Column(name = "it_owner")
     private String itOwner;
+
+    @Column(name = "business_owner")
+    private String businessOwner;
 
     @Column(name = "software_name")
     private String softwareName;

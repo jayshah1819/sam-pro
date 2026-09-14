@@ -1,4 +1,5 @@
 import { Fragment, useEffect, useMemo, useState, type FormEvent } from 'react'
+import { createPortal } from 'react-dom'
 import { client } from '../api'
 import { ToolbarDropdown } from '../components'
 import type { Contract, ContractLicense, Vendor } from '../types'
@@ -80,6 +81,7 @@ function vendorIdLabel(vendor: Vendor): string {
 
 export default function VendorsPage() {
   const [vendors, setVendors] = useState<Vendor[]>([])
+  const [newVendorIds, setNewVendorIds] = useState<number[]>([])
   const [contracts, setContracts] = useState<Contract[]>([])
   const [licenses, setLicenses] = useState<ContractLicense[]>([])
   const [loading, setLoading] = useState(true)
@@ -98,6 +100,8 @@ export default function VendorsPage() {
   const [vendorLicenseForm, setVendorLicenseForm] = useState<VendorLicenseForm>(EMPTY_VENDOR_LICENSE_FORM)
   const [savingVendorLicense, setSavingVendorLicense] = useState(false)
   const [topAddLicenseOpen, setTopAddLicenseOpen] = useState(false)
+  const [vendorLicenseSearch, setVendorLicenseSearch] = useState('')
+  const [vendorLicensePickerOpen, setVendorLicensePickerOpen] = useState(false)
   const [vendorPage, setVendorPage] = useState(0)
 
   useEffect(() => {
@@ -151,6 +155,9 @@ export default function VendorsPage() {
         comments: vendorComments.trim() || null,
       })
       setVendors(prev => [data, ...prev])
+      if (data.vendorId != null) {
+        setNewVendorIds(prev => [data.vendorId as number, ...prev])
+      }
       setVendorName('')
       setVendorJDENumber('')
       setVendorContactEmail('')
@@ -170,7 +177,7 @@ export default function VendorsPage() {
     setSaveError(null)
     try {
       const { data } = await client.post<ContractLicense>(`/vendors/${vendorId}/licenses`, {
-        contractId: Number(vendorLicenseForm.contractId),
+        contractId: vendorLicenseForm.contractId ? Number(vendorLicenseForm.contractId) : null,
         licenseName: vendorLicenseForm.licenseName.trim(),
         softwareName: vendorLicenseForm.softwareName.trim(),
         version: vendorLicenseForm.version.trim() || null,
@@ -183,6 +190,12 @@ export default function VendorsPage() {
         price: vendorLicenseForm.price.trim() ? Number(vendorLicenseForm.price) : null,
       })
       setLicenses(prev => [...prev, data])
+      setExpanded(prev => ({ ...prev, [String(vendorId)]: true }))
+      // Adding a license also bumps the vendor back to the top, same as adding a new vendor.
+      setNewVendorIds(prev => [vendorId, ...prev.filter(id => id !== vendorId)])
+      if (data.contractId != null) {
+        setExpandedContracts(prev => ({ ...prev, [data.contractId as number]: true }))
+      }
       setVendorLicenseForm(EMPTY_VENDOR_LICENSE_FORM)
       setTopAddLicenseOpen(false)
     } catch (err: any) {
@@ -244,7 +257,16 @@ export default function VendorsPage() {
       }
     })
 
-    out.sort((a, b) => b.totalBudget - a.totalBudget || b.contractCount - a.contractCount)
+    out.sort((a, b) => {
+      const aIndex = a.vendorId == null ? -1 : newVendorIds.indexOf(a.vendorId)
+      const bIndex = b.vendorId == null ? -1 : newVendorIds.indexOf(b.vendorId)
+      if (aIndex !== -1 || bIndex !== -1) {
+        if (aIndex === -1) return 1
+        if (bIndex === -1) return -1
+        return aIndex - bIndex
+      }
+      return b.totalBudget - a.totalBudget || b.contractCount - a.contractCount
+    })
     const needle = search.trim().toLowerCase()
     if (!needle) return out
     return out.filter(vendor => {
@@ -254,7 +276,7 @@ export default function VendorsPage() {
         .toLowerCase()
         .includes(needle)
     })
-  }, [contracts, vendors, licenses])
+  }, [contracts, vendors, licenses, search, newVendorIds])
 
   const grandTotal = insights.reduce((sum, r) => sum + r.totalBudget, 0)
 
@@ -341,34 +363,182 @@ export default function VendorsPage() {
               </button>
             </form>
           </ToolbarDropdown>
-          <button type="button" className="contracts-add-button" onClick={() => setTopAddLicenseOpen(true)}>+ Add license</button>
+          <button
+            type="button"
+            className="contracts-add-button"
+            onClick={() => { setVendorLicenseSearch(''); setVendorLicensePickerOpen(false); setTopAddLicenseOpen(true) }}
+          >
+            + Add license
+          </button>
         </div>
       </div>
 
-      {topAddLicenseOpen && (
+      {topAddLicenseOpen && createPortal(
         <div className="contracts-modal-overlay" role="presentation" onMouseDown={event => { if (event.target === event.currentTarget) setTopAddLicenseOpen(false) }}>
           <div className="contracts-modal" role="dialog" aria-modal="true" aria-labelledby="vendor-license-title">
-            <div className="contracts-modal-head"><h2 id="vendor-license-title">Add license</h2><button type="button" className="contracts-modal-close" onClick={() => setTopAddLicenseOpen(false)} aria-label="Close">×</button></div>
-            <div className="contracts-modal-body">
-              <form onSubmit={event => { const vendorId = Number(vendorLicenseForm.vendorId); if (vendorId) void addVendorLicense(event, vendorId) }} className="dashboard-license-form">
-                <select required value={vendorLicenseForm.vendorId} onChange={event => setVendorLicenseForm(form => ({ ...form, vendorId: event.target.value, contractId: '' }))}><option value="">Choose vendor</option>{vendors.map(vendor => <option key={vendor.vendorId} value={vendor.vendorId ?? ''}>{vendor.name}</option>)}</select>
-                <select value={vendorLicenseForm.contractId} disabled={!vendorLicenseForm.vendorId} onChange={event => setVendorLicenseForm(form => ({ ...form, contractId: event.target.value }))}><option value="">Standalone vendor license</option>{contracts.filter(contract => contract.vendorId === Number(vendorLicenseForm.vendorId)).map(contract => <option key={contract.id} value={contract.id}>{contract.contractNumber}</option>)}</select>
-                <input required placeholder="License name" value={vendorLicenseForm.licenseName} onChange={event => setVendorLicenseForm(form => ({ ...form, licenseName: event.target.value }))} />
-                <input required placeholder="Software name" value={vendorLicenseForm.softwareName} onChange={event => setVendorLicenseForm(form => ({ ...form, softwareName: event.target.value }))} />
-                <input placeholder="Version" value={vendorLicenseForm.version} onChange={event => setVendorLicenseForm(form => ({ ...form, version: event.target.value }))} />
-                <select value={vendorLicenseForm.licenseType} onChange={event => setVendorLicenseForm(form => ({ ...form, licenseType: event.target.value as ContractLicense['licenseType'] }))}><option value="PER_SEAT">Per seat</option><option value="PER_DEVICE">Per device</option><option value="SITE_LICENSE">Site license</option><option value="SUBSCRIPTION">Subscription</option></select>
-                <select value={vendorLicenseForm.status} onChange={event => setVendorLicenseForm(form => ({ ...form, status: event.target.value as ContractLicense['status'] }))}><option value="ACTIVE">Active</option><option value="PENDING">Pending</option><option value="EXPIRED">Expired</option></select>
-                <select value={vendorLicenseForm.paymentMethod} onChange={event => setVendorLicenseForm(form => ({ ...form, paymentMethod: event.target.value as ContractLicense['paymentMethod'] }))}><option value="PURCHASE_ORDER">Purchase order</option><option value="CREDIT_CARD">Credit card</option></select>
-                <input type="number" placeholder="Seats" value={vendorLicenseForm.seatsPurchased} onChange={event => setVendorLicenseForm(form => ({ ...form, seatsPurchased: event.target.value }))} />
-                <input type="number" min="0" step="0.01" placeholder="Price" value={vendorLicenseForm.price} onChange={event => setVendorLicenseForm(form => ({ ...form, price: event.target.value }))} />
-                <div className="dashboard-license-actions"><button type="button" className="contracts-clear-button" onClick={() => setTopAddLicenseOpen(false)}>Cancel</button><button type="submit" className="contracts-search-button" disabled={savingVendorLicense}>{savingVendorLicense ? 'Saving…' : 'Save license'}</button></div>
-              </form>
+            <div className="contracts-modal-head">
+              <div>
+                <h2 id="vendor-license-title">Add license</h2>
+                <p className="contracts-modal-subtitle">Search for a vendor, then optionally attach it to one of their contracts.</p>
+              </div>
+              <button type="button" className="contracts-modal-close" onClick={() => setTopAddLicenseOpen(false)} aria-label="Close">×</button>
             </div>
+            <form onSubmit={event => { const vendorId = Number(vendorLicenseForm.vendorId); if (vendorId) void addVendorLicense(event, vendorId) }}>
+              <div className="contracts-modal-body">
+                <section className="contracts-field-section">
+                  <h3 className="contracts-field-section-title">Vendor &amp; contract</h3>
+                  <div className="contracts-field-grid">
+                    <label className="contracts-field vendor-picker">
+                      <span>Vendor</span>
+                      <input
+                        value={vendorLicenseSearch}
+                        onChange={event => {
+                          setVendorLicenseSearch(event.target.value)
+                          setVendorLicensePickerOpen(true)
+                          setVendorLicenseForm(form => ({ ...form, vendorId: '', contractId: '' }))
+                        }}
+                        onFocus={() => setVendorLicensePickerOpen(true)}
+                        onBlur={() => window.setTimeout(() => setVendorLicensePickerOpen(false), 120)}
+                        required
+                        placeholder="Search vendor by name"
+                      />
+                      {vendorLicensePickerOpen && (
+                        <div className="vendor-picker-menu">
+                          {vendors
+                            .filter(vendor => vendor.name.toLowerCase().includes(vendorLicenseSearch.trim().toLowerCase()))
+                            .slice(0, 12)
+                            .map(vendor => (
+                              <button
+                                type="button"
+                                key={vendor.vendorId ?? vendor.name}
+                                className="vendor-picker-option"
+                                onMouseDown={event => event.preventDefault()}
+                                onClick={() => {
+                                  setVendorLicenseForm(form => ({ ...form, vendorId: String(vendor.vendorId ?? ''), contractId: '' }))
+                                  setVendorLicenseSearch(vendor.name)
+                                  setVendorLicensePickerOpen(false)
+                                }}
+                              >
+                                <span>{vendor.name}</span>
+                                <small>{vendor.vendorId != null ? `vendor_id ${vendor.vendorId}` : ''}</small>
+                              </button>
+                            ))}
+                          {vendors.filter(vendor => vendor.name.toLowerCase().includes(vendorLicenseSearch.trim().toLowerCase())).length === 0 && (
+                            <p className="vendor-picker-empty">No vendors match “{vendorLicenseSearch}”.</p>
+                          )}
+                        </div>
+                      )}
+                    </label>
+                    <label className="contracts-field">
+                      <span>Contract (optional)</span>
+                      <select
+                        value={vendorLicenseForm.contractId}
+                        disabled={!vendorLicenseForm.vendorId}
+                        onChange={event => setVendorLicenseForm(form => ({ ...form, contractId: event.target.value }))}
+                      >
+                        <option value="">Standalone vendor license</option>
+                        {contracts
+                          .filter(contract => contract.vendorId === Number(vendorLicenseForm.vendorId))
+                          .map(contract => (
+                            <option key={contract.id} value={contract.id}>
+                              {contract.contractNumber}{contract.softwareName ? ` — ${contract.softwareName}` : ''}
+                            </option>
+                          ))}
+                      </select>
+                      {vendorLicenseForm.vendorId && contracts.filter(contract => contract.vendorId === Number(vendorLicenseForm.vendorId)).length === 0 && (
+                        <small className="contracts-field-hint">This vendor has no contracts yet — the license will be standalone.</small>
+                      )}
+                    </label>
+                  </div>
+                </section>
+
+                <section className="contracts-field-section">
+                  <h3 className="contracts-field-section-title">License</h3>
+                  <div className="contracts-field-grid">
+                    <label className="contracts-field">
+                      <span>License name</span>
+                      <input required placeholder="e.g. E5, Copilot" value={vendorLicenseForm.licenseName} onChange={event => setVendorLicenseForm(form => ({ ...form, licenseName: event.target.value }))} />
+                    </label>
+                    <label className="contracts-field">
+                      <span>Software name</span>
+                      <input required placeholder="Software name" value={vendorLicenseForm.softwareName} onChange={event => setVendorLicenseForm(form => ({ ...form, softwareName: event.target.value }))} />
+                    </label>
+                    <label className="contracts-field">
+                      <span>Version</span>
+                      <input placeholder="Optional" value={vendorLicenseForm.version} onChange={event => setVendorLicenseForm(form => ({ ...form, version: event.target.value }))} />
+                    </label>
+                    <label className="contracts-field">
+                      <span>License type</span>
+                      <select value={vendorLicenseForm.licenseType} onChange={event => setVendorLicenseForm(form => ({ ...form, licenseType: event.target.value as ContractLicense['licenseType'] }))}>
+                        <option value="PER_SEAT">Per seat</option>
+                        <option value="PER_DEVICE">Per device</option>
+                        <option value="SITE_LICENSE">Site license</option>
+                        <option value="SUBSCRIPTION">Subscription</option>
+                      </select>
+                    </label>
+                  </div>
+                </section>
+
+                <section className="contracts-field-section">
+                  <h3 className="contracts-field-section-title">Term &amp; payment</h3>
+                  <div className="contracts-field-grid contracts-field-grid-4">
+                    <label className="contracts-field">
+                      <span>Status</span>
+                      <select value={vendorLicenseForm.status} onChange={event => setVendorLicenseForm(form => ({ ...form, status: event.target.value as ContractLicense['status'] }))}>
+                        <option value="ACTIVE">Active</option>
+                        <option value="PENDING">Pending</option>
+                        <option value="EXPIRED">Expired</option>
+                      </select>
+                    </label>
+                    <label className="contracts-field">
+                      <span>Payment method</span>
+                      <select value={vendorLicenseForm.paymentMethod} onChange={event => setVendorLicenseForm(form => ({ ...form, paymentMethod: event.target.value as ContractLicense['paymentMethod'] }))}>
+                        <option value="PURCHASE_ORDER">Purchase order</option>
+                        <option value="CREDIT_CARD">Credit card</option>
+                      </select>
+                    </label>
+                    <label className="contracts-field">
+                      <span>Start date</span>
+                      <input type="date" required value={vendorLicenseForm.startDate} onChange={event => setVendorLicenseForm(form => ({ ...form, startDate: event.target.value }))} onFocus={event => event.currentTarget.showPicker?.()} />
+                    </label>
+                    <label className="contracts-field">
+                      <span>Expiry date</span>
+                      <input type="date" required value={vendorLicenseForm.expiryDate} onChange={event => setVendorLicenseForm(form => ({ ...form, expiryDate: event.target.value }))} onFocus={event => event.currentTarget.showPicker?.()} />
+                    </label>
+                  </div>
+                </section>
+
+                <section className="contracts-field-section">
+                  <h3 className="contracts-field-section-title">Seats &amp; price</h3>
+                  <div className="contracts-field-grid">
+                    <label className="contracts-field">
+                      <span>Seats</span>
+                      <input type="number" placeholder="Optional" value={vendorLicenseForm.seatsPurchased} onChange={event => setVendorLicenseForm(form => ({ ...form, seatsPurchased: event.target.value }))} />
+                    </label>
+                    <label className="contracts-field">
+                      <span>Price</span>
+                      <input type="number" min="0" step="0.01" placeholder="Optional" value={vendorLicenseForm.price} onChange={event => setVendorLicenseForm(form => ({ ...form, price: event.target.value }))} />
+                    </label>
+                  </div>
+                </section>
+              </div>
+
+              <div className="contracts-modal-footer">
+                {saveError && <p className="contracts-modal-error">{saveError}</p>}
+                <div className="contracts-modal-footer-actions">
+                  <button type="button" className="contracts-clear-button" onClick={() => setTopAddLicenseOpen(false)}>Cancel</button>
+                  <button type="submit" className="contracts-modal-submit" disabled={savingVendorLicense || !vendorLicenseForm.vendorId}>
+                    {savingVendorLicense ? 'Saving…' : 'Save license'}
+                  </button>
+                </div>
+              </div>
+            </form>
           </div>
-        </div>
+        </div>,
+        document.body,
       )}
 
-      {saveError && <p className="text-sm text-red-600">{saveError}</p>}
+      {!topAddLicenseOpen && saveError && <p className="text-sm text-red-600">{saveError}</p>}
 
       {loading && <p className="text-sm text-[#6b6375]">Loading vendor insights…</p>}
       {error && <p className="text-sm text-red-600">{error}</p>}
@@ -387,7 +557,7 @@ export default function VendorsPage() {
         const licensesForContract = (contractId: number) => v.licenses.filter(license => license.contractId === contractId)
         const standaloneLicenses = v.licenses.filter(license => license.contractId == null)
         return (
-          <div key={v.vendorKey} className="vendor-panel contracts-panel">
+          <div key={v.vendorKey} className={`vendor-panel contracts-panel${v.vendorId != null && newVendorIds.includes(v.vendorId) ? ' vendor-panel-new' : ''}`}>
             <div
               role="button"
               tabIndex={0}
@@ -442,7 +612,7 @@ export default function VendorsPage() {
                             onClick={() => toggleContract(c.id)}
                             onKeyDown={event => { if (event.key === 'Enter' || event.key === ' ') toggleContract(c.id) }}
                           >
-                            <td><div className="contract-number">{c.contractNumber}</div><div className="contract-subtitle">{c.softwareName || c.department || 'Contract details'}</div></td>
+                            <td><div className="contract-number">{c.contractNumber}</div><div className="contract-subtitle">{c.softwareName || c.location || 'Contract details'}</div></td>
                             <td className="px-4 py-2 text-[#6b6375]">{c.softwareName || '—'}</td>
                             <td className="px-4 py-2 text-[#6b6375]">{c.startDate || '—'}</td>
                             <td className="px-4 py-2 text-[#6b6375]">{c.endDate || '—'}</td>

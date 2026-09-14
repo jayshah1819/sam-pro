@@ -127,7 +127,7 @@ export default function DashboardPage() {
       const { data } = await client.put<Contract>(`/contracts/${contract.id}`, {
         contractNumber: contract.contractNumber,
         vendorId: contract.vendorId,
-        department: contract.department,
+        location: contract.location,
         softwareName: contract.softwareName,
         startDate: nextStartDate,
         endDate: nextEndDate.toISOString().slice(0, 10),

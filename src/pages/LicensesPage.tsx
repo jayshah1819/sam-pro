@@ -16,6 +16,7 @@ type LicenseForm = {
   contractId: string
   licenseName: string
   itOwner: string
+  businessOwner: string
   comments: string
   softwareName: string
   version: string
@@ -29,7 +30,7 @@ type LicenseForm = {
 }
 
 const EMPTY_FORM: LicenseForm = {
-  vendorId: '', contractId: '', licenseName: '', itOwner: '', comments: '', softwareName: '', version: '',
+  vendorId: '', contractId: '', licenseName: '', itOwner: '', businessOwner: '', comments: '', softwareName: '', version: '',
   licenseType: 'PER_SEAT', status: 'ACTIVE', paymentMethod: 'PURCHASE_ORDER', seatsPurchased: '', price: '', startDate: '', expiryDate: '',
 }
 
@@ -112,6 +113,7 @@ export default function LicensesPage() {
       'License name': license.licenseName,
       Vendor: license.vendorName,
       'IT owner': license.itOwner ?? '',
+      'Business owner': license.businessOwner ?? '',
       'Software name': license.softwareName,
       'Contract ID': license.contractId ?? '',
       Type: license.licenseType,
@@ -144,6 +146,7 @@ export default function LicensesPage() {
       const payload = {
         licenseName: form.licenseName.trim(),
         itOwner: form.itOwner.trim() || null,
+        businessOwner: form.businessOwner.trim() || null,
         comments: form.comments.trim() || null,
         softwareName: form.softwareName.trim(),
         version: form.version.trim() || null,
@@ -203,6 +206,7 @@ export default function LicensesPage() {
       contractId: license.contractId == null ? '' : String(license.contractId),
       licenseName: license.licenseName,
       itOwner: license.itOwner ?? '',
+      businessOwner: license.businessOwner ?? '',
       comments: license.comments ?? '',
       softwareName: license.softwareName,
       version: license.version === 'default' ? '' : license.version,
@@ -291,7 +295,7 @@ export default function LicensesPage() {
                       </button>
                       {selectedVendorContracts.filter(contract => `${contract.contractNumber} ${contract.softwareName ?? ''}`.toLowerCase().includes(contractQuery.toLowerCase())).slice(0, 12).map(contract => (
                         <button type="button" key={contract.id} className="vendor-picker-option" onMouseDown={event => event.preventDefault()} onClick={() => { setForm(previous => ({ ...previous, contractId: String(contract.id) })); setContractQuery(contract.contractNumber); setContractPickerOpen(false) }}>
-                          <span>{contract.contractNumber}</span><small>{contract.softwareName || contract.department || 'Contract'}</small>
+                          <span>{contract.contractNumber}</span><small>{contract.softwareName || contract.location || 'Contract'}</small>
                         </button>
                       ))}
                     </div>
@@ -299,6 +303,7 @@ export default function LicensesPage() {
                 </div>
                 <input required placeholder="License name" value={form.licenseName} onChange={event => setForm(previous => ({ ...previous, licenseName: event.target.value }))} />
                 <input placeholder="IT owner" value={form.itOwner} onChange={event => setForm(previous => ({ ...previous, itOwner: event.target.value }))} />
+                <input placeholder="Business owner" value={form.businessOwner} onChange={event => setForm(previous => ({ ...previous, businessOwner: event.target.value }))} />
                 <input required placeholder="Software name" value={form.softwareName} onChange={event => setForm(previous => ({ ...previous, softwareName: event.target.value }))} />
                 <input placeholder="Version" value={form.version} onChange={event => setForm(previous => ({ ...previous, version: event.target.value }))} />
                 <select value={form.licenseType} onChange={event => setForm(previous => ({ ...previous, licenseType: event.target.value as ContractLicense['licenseType'] }))}><option value="PER_SEAT">Per seat</option><option value="PER_DEVICE">Per device</option><option value="SITE_LICENSE">Site license</option><option value="SUBSCRIPTION">Subscription</option></select>
@@ -323,6 +328,7 @@ export default function LicensesPage() {
                 <tr>
                   <th>License</th>
                   <th>IT owner</th>
+                  <th>Business owner</th>
                   <th>Vendor</th>
                   <th>Software</th>
                   <th>Contract ID</th>
@@ -340,6 +346,7 @@ export default function LicensesPage() {
                   <tr key={license.licenseId} className="contract-row">
                     <td className="font-semibold">{license.licenseName}</td>
                     <td>{license.itOwner || '—'}</td>
+                    <td>{license.businessOwner || '—'}</td>
                     <td>{license.vendorName || '—'}</td>
                     <td>{license.softwareName}</td>
                     <td className="font-mono text-xs">{license.contractId ?? '—'}</td>
@@ -353,7 +360,7 @@ export default function LicensesPage() {
                   </tr>
                 ))}
                 {visibleLicenses.length === 0 && (
-                  <tr><td colSpan={10} className="py-10 text-center text-[#6b6375]">No licenses found.</td></tr>
+                  <tr><td colSpan={11} className="py-10 text-center text-[#6b6375]">No licenses found.</td></tr>
                 )}
               </tbody>
             </table> : <table className="contracts-table licenses-table">

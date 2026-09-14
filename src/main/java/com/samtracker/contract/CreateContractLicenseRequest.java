@@ -10,17 +10,18 @@ import java.time.LocalDate;
 import java.math.BigDecimal;
 
 public record CreateContractLicenseRequest(
-                @NotBlank String licenseName,
-                String itOwner,
-                String comments,
-                @NotBlank String softwareName,
-                String version,
-                @NotNull LicenseType licenseType,
-                LicenseStatus status,
-                PaymentMethod paymentMethod,
-                Integer seatsPurchased,
-                BigDecimal price,
-                Integer contractId,
-                LocalDate startDate,
-                LocalDate expiryDate) {
+        @NotBlank String licenseName,
+        String itOwner,
+        String businessOwner,
+        String comments,
+        @NotBlank String softwareName,
+        String version,
+        @NotNull LicenseType licenseType,
+        LicenseStatus status,
+        PaymentMethod paymentMethod,
+        Integer seatsPurchased,
+        BigDecimal price,
+        Integer contractId,
+        LocalDate startDate,
+        LocalDate expiryDate) {
 }

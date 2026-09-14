@@ -78,8 +78,9 @@ export interface Contract {
   vendorJDENumber: string | null
   contractNumber: string
   itOwner: string | null
+  businessOwner: string | null
   comments: string | null
-  department: string | null
+  location: string | null
   softwareName: string | null
   softwareIds: number[]
   startDate: string
@@ -93,6 +94,7 @@ export interface ContractLicense {
   contractId: number | null
   licenseName: string
   itOwner: string | null
+  businessOwner: string | null
   comments: string | null
   softwareId: number | null
   vendorName: string

@@ -72,7 +72,7 @@ public class ContractService {
             attachSoftwareIds(contracts, null);
             return pageContracts(contracts, capped);
         }
-        Page<Contract> contracts = contractRepository.findByTenantId(TenantContext.get(), capped);
+        Page<Contract> contracts = contractRepository.findByTenantIdOrderByIdDesc(TenantContext.get(), capped);
         contracts.getContent().forEach(this::attachVendorSnapshot);
         attachSoftwareIds(contracts.getContent(), TenantContext.get());
         return contracts;
@@ -147,6 +147,65 @@ public class ContractService {
     }
 
     public Contract create(CreateContractRequest request) {
+        // Admins browse vendors across all tenants (see VendorService.findAllAdmin), so
+        // the selected vendorId may not belong to the admin's own TenantContext.
+        // NOTE: runInTenant() only swaps the TenantContext value — it does NOT make
+        // Hibernate/JPA (vendorRepository, contractRepository) see the vendor's tenant,
+        // so routing this through createInTenant() still 400s with "Vendor not found".
+        // Use the same raw-JDBC cross-tenant pattern as updateForAdmin/addLicenseRaw
+        // instead.
+        if (isCurrentUserAdmin()) {
+            Long tenantId = resolveTenantIdForVendor(request.vendorId());
+            return createForAdmin(tenantId, request);
+        }
+        return createInTenant(request);
+    }
+
+    private Contract createForAdmin(Long tenantId, CreateContractRequest request) {
+        String contractNumber = request.contractNumber().strip();
+        if (contractNumber.isEmpty()) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "contractNumber is required");
+        }
+        if (request.endDate().isBefore(request.startDate())) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "endDate must be on or after startDate");
+        }
+
+        Vendor vendor = findVendorByPublicIdAdmin(tenantId, request.vendorId());
+
+        jdbcTemplate.update(
+                """
+                        INSERT INTO contracts (tenant_id, vendor_id, vendor_name, vendor_jde_number, contract_number,
+                            location, it_owner, business_owner, comments, software_name, start_date, end_date, status, value)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        """,
+                tenantId,
+                vendor.getVendorId(),
+                vendor.getName(),
+                vendor.getVendorJDENumber(),
+                contractNumber,
+                request.location() == null ? null : request.location().strip(),
+                request.itOwner() == null ? null : request.itOwner().strip(),
+                request.businessOwner() == null ? null : request.businessOwner().strip(),
+                request.comments() == null ? null : request.comments().strip(),
+                request.softwareName() == null ? null : request.softwareName().strip(),
+                request.startDate(),
+                request.endDate(),
+                (request.status() == null ? ContractStatus.ACTIVE : request.status()).name(),
+                request.value());
+
+        Integer contractId = jdbcTemplate.queryForObject(
+                "SELECT contract_id FROM contracts WHERE tenant_id = ? ORDER BY contract_id DESC LIMIT 1",
+                Integer.class, tenantId);
+
+        if (request.licenses() != null) {
+            request.licenses().forEach(license -> addLicense(contractId, license));
+        }
+
+        return fetchContractByIdForAdmin(contractId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Contract not found"));
+    }
+
+    private Contract createInTenant(CreateContractRequest request) {
         String contractNumber = request.contractNumber().strip();
         if (contractNumber.isEmpty()) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "contractNumber is required");
@@ -164,8 +223,9 @@ public class ContractService {
         contract.setVendorId(vendor.getVendorId());
         contract.setVendorName(vendor.getName());
         contract.setVendorJDENumber(vendor.getVendorJDENumber());
-        contract.setDepartment(request.department() == null ? null : request.department().strip());
+        contract.setLocation(request.location() == null ? null : request.location().strip());
         contract.setItOwner(request.itOwner() == null ? null : request.itOwner().strip());
+        contract.setBusinessOwner(request.businessOwner() == null ? null : request.businessOwner().strip());
         contract.setComments(request.comments() == null ? null : request.comments().strip());
         contract.setSoftwareName(request.softwareName() == null ? null : request.softwareName().strip());
         contract.setStartDate(request.startDate());
@@ -196,14 +256,14 @@ public class ContractService {
         int updated = jdbcTemplate.update(
                 """
                                         UPDATE contracts
-                        SET vendor_id = ?, vendor_name = ?, vendor_jde_number = ?, contract_number = ?, department = ?, software_name = ?, start_date = ?, end_date = ?, status = ?, value = ?
+                        SET vendor_id = ?, vendor_name = ?, vendor_jde_number = ?, contract_number = ?, location = ?, software_name = ?, start_date = ?, end_date = ?, status = ?, value = ?
                                         WHERE contract_id = ? AND tenant_id = ?
                                         """,
                 vendor.getVendorId(),
                 vendor.getName(),
                 vendor.getVendorJDENumber(),
                 request.contractNumber().strip(),
-                request.department() == null ? null : request.department().strip(),
+                request.location() == null ? null : request.location().strip(),
                 request.softwareName() == null ? null : request.softwareName().strip(),
                 request.startDate(),
                 request.endDate(),
@@ -240,8 +300,9 @@ public class ContractService {
         contract.setVendorId(vendor.getVendorId());
         contract.setVendorName(vendor.getName());
         contract.setVendorJDENumber(vendor.getVendorJDENumber());
-        contract.setDepartment(request.department() == null ? null : request.department().strip());
+        contract.setLocation(request.location() == null ? null : request.location().strip());
         contract.setItOwner(request.itOwner() == null ? null : request.itOwner().strip());
+        contract.setBusinessOwner(request.businessOwner() == null ? null : request.businessOwner().strip());
         contract.setComments(request.comments() == null ? null : request.comments().strip());
         contract.setSoftwareName(request.softwareName() == null ? null : request.softwareName().strip());
         contract.setStartDate(request.startDate());
@@ -287,7 +348,7 @@ public class ContractService {
         requireContractRaw(tenantId, contractId);
         return jdbcTemplate.query(
                 """
-                        SELECT e.license_id, e.contract_id, e.license_name, e.it_owner, e.comments, e.software_id,
+                        SELECT e.license_id, e.contract_id, e.license_name, e.it_owner, e.business_owner, e.comments, e.software_id,
                                s.vendor AS vendor_name, s.name AS software_name, s.version,
                                e.license_type, e.status, e.payment_method, e.seats_purchased, e.price, e.start_date, e.expiry_date
                         FROM entitlements e
@@ -301,7 +362,7 @@ public class ContractService {
         if (isCurrentUserAdmin()) {
             return jdbcTemplate.query(
                     """
-                            SELECT e.license_id, e.contract_id, e.license_name, e.it_owner, e.comments, e.software_id,
+                            SELECT e.license_id, e.contract_id, e.license_name, e.it_owner, e.business_owner, e.comments, e.software_id,
                                    s.vendor AS vendor_name, s.name AS software_name, s.version,
                                    e.license_type, e.status, e.payment_method, e.seats_purchased, e.price, e.start_date, e.expiry_date
                             FROM entitlements e
@@ -354,6 +415,7 @@ public class ContractService {
             entitlement.setContract(contract);
             entitlement.setLicenseName(licenseName);
             entitlement.setItOwner(contract.getItOwner());
+            entitlement.setBusinessOwner(contract.getBusinessOwner());
             entitlement.setComments(request.comments() == null ? null : request.comments().strip());
             entitlement.setSoftwareProduct(software);
             entitlement.setLicenseType(request.licenseType());
@@ -380,6 +442,7 @@ public class ContractService {
         LocalDate endDate = (LocalDate) contractRow.get("end_date");
         String existingSoftwareName = (String) contractRow.get("software_name");
         String itOwner = (String) contractRow.get("it_owner");
+        String businessOwner = (String) contractRow.get("business_owner");
 
         Integer softwareId = findOrCreateSoftwareRaw(tenantId, softwareName, vendorName, request.version());
 
@@ -394,11 +457,13 @@ public class ContractService {
                 ? com.samtracker.entitlement.PaymentMethod.PURCHASE_ORDER
                 : request.paymentMethod()).name();
 
-        jdbcTemplate.update("""
-                INSERT INTO entitlements (tenant_id, software_id, contract_id, license_name, it_owner, comments,
-                    license_type, status, payment_method, seats_purchased, price, start_date, expiry_date)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                """, tenantId, softwareId, contractId, licenseName, itOwner,
+        jdbcTemplate.update(
+                """
+                        INSERT INTO entitlements (tenant_id, software_id, contract_id, license_name, it_owner, business_owner, comments,
+                            license_type, status, payment_method, seats_purchased, price, start_date, expiry_date)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        """,
+                tenantId, softwareId, contractId, licenseName, itOwner, businessOwner,
                 request.comments() == null ? null : request.comments().strip(),
                 request.licenseType().name(), status, paymentMethod, request.seatsPurchased(), request.price(),
                 startDate, endDate);
@@ -443,6 +508,7 @@ public class ContractService {
             entitlement.setSoftwareProduct(software);
             entitlement.setLicenseName(licenseName);
             entitlement.setItOwner(contract.getItOwner());
+            entitlement.setBusinessOwner(contract.getBusinessOwner());
             entitlement.setComments(request.comments() == null ? null : request.comments().strip());
             entitlement.setLicenseType(request.licenseType());
             entitlement.setStatus(
@@ -468,6 +534,7 @@ public class ContractService {
         LocalDate startDate = (LocalDate) contractRow.get("start_date");
         LocalDate endDate = (LocalDate) contractRow.get("end_date");
         String itOwner = (String) contractRow.get("it_owner");
+        String businessOwner = (String) contractRow.get("business_owner");
 
         Integer softwareId = findOrCreateSoftwareRaw(tenantId, softwareName, vendorName, request.version());
         String status = (request.status() == null ? com.samtracker.entitlement.LicenseStatus.ACTIVE : request.status())
@@ -476,12 +543,14 @@ public class ContractService {
                 ? com.samtracker.entitlement.PaymentMethod.PURCHASE_ORDER
                 : request.paymentMethod()).name();
 
-        jdbcTemplate.update("""
-                UPDATE entitlements
-                SET software_id = ?, license_name = ?, it_owner = ?, comments = ?, license_type = ?, status = ?,
-                    payment_method = ?, seats_purchased = ?, price = ?, start_date = ?, expiry_date = ?
-                WHERE license_id = ? AND tenant_id = ?
-                """, softwareId, licenseName, itOwner,
+        jdbcTemplate.update(
+                """
+                        UPDATE entitlements
+                        SET software_id = ?, license_name = ?, it_owner = ?, business_owner = ?, comments = ?, license_type = ?, status = ?,
+                            payment_method = ?, seats_purchased = ?, price = ?, start_date = ?, expiry_date = ?
+                        WHERE license_id = ? AND tenant_id = ?
+                        """,
+                softwareId, licenseName, itOwner, businessOwner,
                 request.comments() == null ? null : request.comments().strip(),
                 request.licenseType().name(), status, paymentMethod, request.seatsPurchased(), request.price(),
                 startDate, endDate, licenseId, tenantId);
@@ -515,7 +584,7 @@ public class ContractService {
             String vendorName = vendorNameRaw(tenantId, vendorId);
             return jdbcTemplate.query(
                     """
-                            SELECT e.license_id, e.contract_id, e.license_name, e.it_owner, e.comments, e.software_id,
+                            SELECT e.license_id, e.contract_id, e.license_name, e.it_owner, e.business_owner, e.comments, e.software_id,
                                    s.vendor AS vendor_name, s.name AS software_name, s.version,
                                    e.license_type, e.status, e.payment_method, e.seats_purchased, e.price, e.start_date, e.expiry_date
                             FROM entitlements e
@@ -568,6 +637,7 @@ public class ContractService {
         entitlement.setSoftwareProduct(software);
         entitlement.setLicenseName(request.licenseName().strip());
         entitlement.setItOwner(request.itOwner() == null ? null : request.itOwner().strip());
+        entitlement.setBusinessOwner(request.businessOwner() == null ? null : request.businessOwner().strip());
         entitlement.setComments(request.comments() == null ? null : request.comments().strip());
         entitlement.setLicenseType(request.licenseType());
         entitlement.setStatus(
@@ -581,7 +651,8 @@ public class ContractService {
         return toLicenseView(entitlementRepository.findById(saved.getId()).orElse(saved));
     }
 
-    private ContractLicenseView addVendorLicenseRaw(Long tenantId, Integer vendorId, CreateContractLicenseRequest request) {
+    private ContractLicenseView addVendorLicenseRaw(Long tenantId, Integer vendorId,
+            CreateContractLicenseRequest request) {
         String vendorName = vendorNameRaw(tenantId, vendorId);
         String softwareName = request.softwareName().strip();
         String licenseName = request.licenseName().strip();
@@ -601,7 +672,8 @@ public class ContractService {
             if (expiryDate.isBefore(startDate)) {
                 throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "expiryDate must be on or after startDate");
             }
-            jdbcTemplate.update("UPDATE contracts SET start_date = ?, end_date = ? WHERE contract_id = ? AND tenant_id = ?",
+            jdbcTemplate.update(
+                    "UPDATE contracts SET start_date = ?, end_date = ? WHERE contract_id = ? AND tenant_id = ?",
                     startDate, expiryDate, contractId, tenantId);
         } else {
             startDate = request.startDate() == null ? LocalDate.now() : request.startDate();
@@ -614,12 +686,15 @@ public class ContractService {
                 ? com.samtracker.entitlement.PaymentMethod.PURCHASE_ORDER
                 : request.paymentMethod()).name();
 
-        jdbcTemplate.update("""
-                INSERT INTO entitlements (tenant_id, software_id, contract_id, license_name, it_owner, comments,
-                    license_type, status, payment_method, seats_purchased, price, start_date, expiry_date)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                """, tenantId, softwareId, contractId, licenseName,
+        jdbcTemplate.update(
+                """
+                        INSERT INTO entitlements (tenant_id, software_id, contract_id, license_name, it_owner, business_owner, comments,
+                            license_type, status, payment_method, seats_purchased, price, start_date, expiry_date)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        """,
+                tenantId, softwareId, contractId, licenseName,
                 request.itOwner() == null ? null : request.itOwner().strip(),
+                request.businessOwner() == null ? null : request.businessOwner().strip(),
                 request.comments() == null ? null : request.comments().strip(),
                 request.licenseType().name(), status, paymentMethod, request.seatsPurchased(), request.price(),
                 startDate, expiryDate);
@@ -649,6 +724,7 @@ public class ContractService {
                 request.version());
         entitlement.setSoftwareProduct(software);
         entitlement.setLicenseName(request.licenseName().strip());
+        entitlement.setBusinessOwner(request.businessOwner() == null ? null : request.businessOwner().strip());
         entitlement.setComments(request.comments() == null ? null : request.comments().strip());
         entitlement.setLicenseType(request.licenseType());
         entitlement.setStatus(
@@ -698,10 +774,17 @@ public class ContractService {
     private ContractLicenseView updateVendorLicenseRaw(Long tenantId, Integer vendorId, Integer licenseId,
             UpdateContractLicenseRequest request) {
         String vendorName = vendorNameRaw(tenantId, vendorId);
-        Map<String, Object> licenseRow = jdbcTemplate.queryForList(
+        Map<String, Object> licenseRow = jdbcTemplate.query(
                 "SELECT e.software_id, e.start_date, e.expiry_date FROM entitlements e "
                         + "JOIN software_products s ON s.software_id = e.software_id AND s.tenant_id = e.tenant_id "
                         + "WHERE e.license_id = ? AND e.tenant_id = ? AND LOWER(s.vendor) = LOWER(?)",
+                (rs, rowNum) -> {
+                    Map<String, Object> row = new HashMap<>();
+                    row.put("software_id", rs.getObject("software_id"));
+                    row.put("start_date", rs.getObject("start_date", LocalDate.class));
+                    row.put("expiry_date", rs.getObject("expiry_date", LocalDate.class));
+                    return row;
+                },
                 licenseId, tenantId, vendorName)
                 .stream().findFirst()
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "License not found"));
@@ -730,11 +813,13 @@ public class ContractService {
             if (expiryDate.isBefore(startDate)) {
                 throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "expiryDate must be on or after startDate");
             }
-            jdbcTemplate.update("UPDATE contracts SET start_date = ?, end_date = ? WHERE contract_id = ? AND tenant_id = ?",
+            jdbcTemplate.update(
+                    "UPDATE contracts SET start_date = ?, end_date = ? WHERE contract_id = ? AND tenant_id = ?",
                     startDate, expiryDate, contractId, tenantId);
         } else {
             startDate = request.startDate() == null ? (LocalDate) licenseRow.get("start_date") : request.startDate();
-            expiryDate = request.expiryDate() == null ? (LocalDate) licenseRow.get("expiry_date") : request.expiryDate();
+            expiryDate = request.expiryDate() == null ? (LocalDate) licenseRow.get("expiry_date")
+                    : request.expiryDate();
             if (Boolean.TRUE.equals(request.renew())) {
                 startDate = (LocalDate) licenseRow.get("expiry_date");
                 expiryDate = startDate.plusYears(1);
@@ -745,12 +830,15 @@ public class ContractService {
                 ? com.samtracker.entitlement.PaymentMethod.PURCHASE_ORDER
                 : request.paymentMethod()).name();
 
-        jdbcTemplate.update("""
-                UPDATE entitlements
-                SET software_id = ?, contract_id = ?, license_name = ?, comments = ?, license_type = ?, status = ?,
-                    payment_method = ?, seats_purchased = ?, price = ?, start_date = ?, expiry_date = ?
-                WHERE license_id = ? AND tenant_id = ?
-                """, softwareId, contractId, request.licenseName().strip(),
+        jdbcTemplate.update(
+                """
+                        UPDATE entitlements
+                        SET software_id = ?, contract_id = ?, license_name = ?, business_owner = ?, comments = ?, license_type = ?, status = ?,
+                            payment_method = ?, seats_purchased = ?, price = ?, start_date = ?, expiry_date = ?
+                        WHERE license_id = ? AND tenant_id = ?
+                        """,
+                softwareId, contractId, request.licenseName().strip(),
+                request.businessOwner() == null ? null : request.businessOwner().strip(),
                 request.comments() == null ? null : request.comments().strip(), request.licenseType().name(), status,
                 paymentMethod, request.seatsPurchased(), request.price(), startDate, expiryDate, licenseId, tenantId);
 
@@ -814,6 +902,7 @@ public class ContractService {
             entitlement.setExpiryDate(endDate);
             if (contract != null) {
                 entitlement.setItOwner(contract.getItOwner());
+                entitlement.setBusinessOwner(contract.getBusinessOwner());
             }
         });
         entitlementRepository.flush();
@@ -828,7 +917,8 @@ public class ContractService {
     }
 
     // Admin cross-tenant path: JPA is bound to the request's own tenant, so a raw
-    // SQL lookup is used here instead of vendorRepository (see VendorService for details).
+    // SQL lookup is used here instead of vendorRepository (see VendorService for
+    // details).
     private Vendor findVendorByPublicIdAdmin(Long tenantId, Integer vendorId) {
         if (vendorId == null) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "vendorId is required");
@@ -894,9 +984,24 @@ public class ContractService {
     }
 
     private Map<String, Object> requireContractRaw(Long tenantId, Integer contractId) {
-        List<Map<String, Object>> rows = jdbcTemplate.queryForList(
-                "SELECT contract_id, vendor_name, vendor_id, it_owner, software_name, start_date, end_date "
+        // queryForList returns java.sql.Date for date columns; read via getObject(...,
+        // LocalDate.class)
+        // so downstream (LocalDate) casts on this map don't throw ClassCastException.
+        List<Map<String, Object>> rows = jdbcTemplate.query(
+                "SELECT contract_id, vendor_name, vendor_id, it_owner, business_owner, software_name, start_date, end_date "
                         + "FROM contracts WHERE contract_id = ? AND tenant_id = ?",
+                (rs, rowNum) -> {
+                    Map<String, Object> row = new HashMap<>();
+                    row.put("contract_id", rs.getObject("contract_id"));
+                    row.put("vendor_name", rs.getString("vendor_name"));
+                    row.put("vendor_id", rs.getObject("vendor_id"));
+                    row.put("it_owner", rs.getString("it_owner"));
+                    row.put("business_owner", rs.getString("business_owner"));
+                    row.put("software_name", rs.getString("software_name"));
+                    row.put("start_date", rs.getObject("start_date", LocalDate.class));
+                    row.put("end_date", rs.getObject("end_date", LocalDate.class));
+                    return row;
+                },
                 contractId, tenantId);
         if (rows.isEmpty()) {
             throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Contract not found");
@@ -933,7 +1038,7 @@ public class ContractService {
     private ContractLicenseView findLicenseByIdRaw(Long tenantId, Integer licenseId) {
         List<ContractLicenseView> rows = jdbcTemplate.query(
                 """
-                        SELECT e.license_id, e.contract_id, e.license_name, e.it_owner, e.comments, e.software_id,
+                        SELECT e.license_id, e.contract_id, e.license_name, e.it_owner, e.business_owner, e.comments, e.software_id,
                                s.vendor AS vendor_name, s.name AS software_name, s.version,
                                e.license_type, e.status, e.payment_method, e.seats_purchased, e.price, e.start_date, e.expiry_date
                         FROM entitlements e
@@ -953,6 +1058,7 @@ public class ContractService {
                 (Integer) rs.getObject("contract_id"),
                 rs.getString("license_name"),
                 rs.getString("it_owner"),
+                rs.getString("business_owner"),
                 rs.getString("comments"),
                 (Integer) rs.getObject("software_id"),
                 rs.getString("vendor_name"),
@@ -991,6 +1097,7 @@ public class ContractService {
                 entitlement.getContract() == null ? null : entitlement.getContract().getId(),
                 entitlement.getLicenseName(),
                 entitlement.getItOwner(),
+                entitlement.getBusinessOwner(),
                 entitlement.getComments(),
                 software.getSoftwareId(),
                 software.getVendor(),
@@ -1029,13 +1136,13 @@ public class ContractService {
 
     private List<Contract> fetchContractsForAdmin(Integer contractId) {
         String sql = """
-                    SELECT c.contract_id, c.tenant_id, c.contract_number, c.department, c.it_owner, c.start_date, c.end_date, c.status, c.value,
+                    SELECT c.contract_id, c.tenant_id, c.contract_number, c.location, c.it_owner, c.business_owner, c.start_date, c.end_date, c.status, c.value,
                                         c.vendor_id AS contract_vendor_id, c.vendor_name, c.vendor_jde_number, c.software_name,
                                     v.name AS vendor_entity_name, v.vendor_id AS vendor_display_id, v.vendor_jde_number AS vendor_entity_jde_number, v.canonical_name, v.contact_email, v.website
                     FROM contracts c
                 LEFT JOIN vendors v ON v.tenant_id = c.tenant_id AND v.vendor_id = c.vendor_id
                     WHERE (? IS NULL OR c.contract_id = ?)
-                    ORDER BY c.start_date DESC
+                    ORDER BY c.contract_id DESC
                     """;
         List<Contract> contracts = jdbcTemplate.query(sql, this::mapContractRow, contractId, contractId);
         attachSoftwareIds(contracts, null);
@@ -1055,8 +1162,9 @@ public class ContractService {
         contract.setId((Integer) rs.getObject("contract_id"));
         contract.assignTenantId(rs.getLong("tenant_id"));
         contract.setContractNumber(rs.getString("contract_number"));
-        contract.setDepartment(rs.getString("department"));
+        contract.setLocation(rs.getString("location"));
         contract.setItOwner(rs.getString("it_owner"));
+        contract.setBusinessOwner(rs.getString("business_owner"));
         contract.setVendorId((Integer) rs.getObject("contract_vendor_id"));
         contract.setVendorName(rs.getString("vendor_name"));
         contract.setVendorJDENumber(rs.getString("vendor_jde_number"));
@@ -1111,7 +1219,8 @@ public class ContractService {
                     safeSearch(contract.getVendorName()),
                     safeSearch(contract.getVendorJDENumber()),
                     safeSearch(contract.getSoftwareName()),
-                    safeSearch(contract.getDepartment()),
+                    safeSearch(contract.getLocation()),
+                    safeSearch(contract.getBusinessOwner()),
                     safeSearch(contract.getStatus() == null ? null : contract.getStatus().name()),
                     safeSearch(contract.getStartDate() == null ? null : contract.getStartDate().toString()),
                     safeSearch(contract.getEndDate() == null ? null : contract.getEndDate().toString()),
