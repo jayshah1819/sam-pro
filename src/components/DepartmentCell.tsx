@@ -1,34 +1,28 @@
 import { useState } from 'react'
-import type { Contract } from '../types'
-import { updateContractDepartment } from '../utils/departments'
 
 type Props = {
-  contract: Contract | null | undefined
-  onSaved: (updated: Contract) => void
+  value: string
+  onSave: (value: string) => Promise<void>
 }
 
-// Inline-editable department badge. Department lives on the contract record,
-// so saving here updates the contract directly — every other tab (Contracts,
-// Licenses, Vendors, Departments) reads the same contract and stays in sync.
-export default function DepartmentCell({ contract, onSaved }: Props) {
+// Inline-editable department badge. The caller decides what "value" is backed
+// by (a contract's location, or a standalone license's own location) and how
+// to persist it — this component just handles the click-to-edit interaction.
+export default function DepartmentCell({ value, onSave }: Props) {
   const [editing, setEditing] = useState(false)
-  const [value, setValue] = useState(contract?.location ?? '')
+  const [draft, setDraft] = useState(value)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
-  if (!contract) return <span className="dept-cell-empty">—</span>
-
   async function save() {
-    if (!contract) return
-    if (value.trim() === (contract.location ?? '').trim()) {
+    if (draft.trim() === value.trim()) {
       setEditing(false)
       return
     }
     setSaving(true)
     setError(null)
     try {
-      const updated = await updateContractDepartment(contract, value)
-      onSaved(updated)
+      await onSave(draft)
       setEditing(false)
     } catch {
       setError('Failed to save')
@@ -42,10 +36,10 @@ export default function DepartmentCell({ contract, onSaved }: Props) {
       <button
         type="button"
         className="dept-cell-view"
-        onClick={event => { event.stopPropagation(); setValue(contract.location ?? ''); setEditing(true) }}
+        onClick={event => { event.stopPropagation(); setDraft(value); setEditing(true) }}
         title="Click to edit department"
       >
-        {contract.location || '—'}
+        {value || '—'}
       </button>
     )
   }
@@ -54,9 +48,9 @@ export default function DepartmentCell({ contract, onSaved }: Props) {
     <span className="dept-cell-edit" onClick={event => event.stopPropagation()}>
       <input
         autoFocus
-        value={value}
+        value={draft}
         disabled={saving}
-        onChange={e => setValue(e.target.value)}
+        onChange={e => setDraft(e.target.value)}
         onKeyDown={e => {
           if (e.key === 'Enter') void save()
           if (e.key === 'Escape') { setEditing(false); setError(null) }

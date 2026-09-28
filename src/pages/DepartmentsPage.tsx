@@ -24,6 +24,10 @@ type DepartmentNode = {
   children: DepartmentNode[]
   ownContracts: Contract[]
   allContracts: Contract[]
+  // Licenses with no linked contract carry their own department directly on the
+  // license (Entitlement.location) instead of inheriting it from a contract.
+  ownStandaloneLicenses: ContractLicense[]
+  allStandaloneLicenses: ContractLicense[]
 }
 
 function normalize(location: string | null | undefined) {
@@ -61,33 +65,49 @@ export default function DepartmentsPage() {
       byLocation.get(key)!.push(contract)
     })
 
+    const standaloneByLocation = new Map<string, ContractLicense[]>()
+    licenses.forEach(license => {
+      if (license.contractId != null) return
+      const key = normalize(license.location)
+      if (!standaloneByLocation.has(key)) standaloneByLocation.set(key, [])
+      standaloneByLocation.get(key)!.push(license)
+    })
+
     function buildNode(name: string, children: string[]): DepartmentNode {
       const key = normalize(name)
       const ownContracts = byLocation.get(key) ?? []
+      const ownStandaloneLicenses = standaloneByLocation.get(key) ?? []
       const childNodes = children.map(childName => buildNode(childName, []))
       const allContracts = [...ownContracts, ...childNodes.flatMap(child => child.allContracts)]
-      return { key, label: name, children: childNodes, ownContracts, allContracts }
+      const allStandaloneLicenses = [...ownStandaloneLicenses, ...childNodes.flatMap(child => child.allStandaloneLicenses)]
+      return { key, label: name, children: childNodes, ownContracts, allContracts, ownStandaloneLicenses, allStandaloneLicenses }
     }
 
     const knownNodes = DEPARTMENT_TREE.map(node => buildNode(node.name, node.children))
 
     // Anything not under a known department/subsidiary still gets its own top-level node
-    // (e.g. "IT", blank company) so no contract data is silently dropped.
+    // (e.g. "IT", blank company) so no contract or standalone-license data is silently dropped.
     const otherNodes: DepartmentNode[] = []
-    byLocation.forEach((rows, key) => {
+    const otherKeys = new Set([...byLocation.keys(), ...standaloneByLocation.keys()])
+    otherKeys.forEach(key => {
       if (KNOWN_DEPARTMENTS.has(key)) return
+      const rows = byLocation.get(key) ?? []
+      const standaloneRows = standaloneByLocation.get(key) ?? []
+      const label = key === '' ? 'No company set' : (rows[0]?.location ?? standaloneRows[0]?.location ?? key)
       otherNodes.push({
         key,
-        label: key === '' ? 'No company set' : rows[0]?.location ?? key,
+        label,
         children: [],
         ownContracts: rows,
         allContracts: rows,
+        ownStandaloneLicenses: standaloneRows,
+        allStandaloneLicenses: standaloneRows,
       })
     })
     otherNodes.sort((a, b) => a.label.localeCompare(b.label))
 
     return [...knownNodes, ...otherNodes]
-  }, [contracts])
+  }, [contracts, licenses])
 
   const licensesByContractId = useMemo(() => {
     const map = new Map<number, ContractLicense[]>()
@@ -101,6 +121,10 @@ export default function DepartmentsPage() {
 
   function licensesForContracts(rows: Contract[]) {
     return rows.flatMap(contract => licensesByContractId.get(contract.id) ?? [])
+  }
+
+  function licensesForNode(node: DepartmentNode) {
+    return [...licensesForContracts(node.allContracts), ...node.allStandaloneLicenses]
   }
 
   function toggleExpanded(key: string) {
@@ -122,7 +146,7 @@ export default function DepartmentsPage() {
   }
 
   const selectedNode = selectedKey == null ? null : findNode(tree, selectedKey)
-  const selectedLicenses = selectedNode ? licensesForContracts(selectedNode.allContracts) : []
+  const selectedLicenses = selectedNode ? licensesForNode(selectedNode) : []
   const selectedTotal = selectedLicenses.reduce((sum, license) => sum + (license.price ?? 0), 0)
 
   function exportDeptContracts(node: DepartmentNode) {
@@ -141,7 +165,7 @@ export default function DepartmentsPage() {
   }
 
   function exportDeptLicenses(node: DepartmentNode) {
-    downloadExcel(`${node.label}-licenses.xlsx`, 'Licenses', licensesForContracts(node.allContracts).map(license => ({
+    downloadExcel(`${node.label}-licenses.xlsx`, 'Licenses', licensesForNode(node).map(license => ({
       'License name': license.licenseName,
       Vendor: license.vendorName,
       'IT owner': license.itOwner ?? '',
@@ -166,7 +190,7 @@ export default function DepartmentsPage() {
   function renderNode(node: DepartmentNode, depthLevel: number) {
     const isExpanded = expanded.has(node.key)
     const isSelected = selectedKey === node.key
-    const rollupLicenses = licensesForContracts(node.allContracts)
+    const rollupLicenses = licensesForNode(node)
     const rollupTotal = rollupLicenses.reduce((sum, license) => sum + (license.price ?? 0), 0)
 
     return (

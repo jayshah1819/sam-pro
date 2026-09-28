@@ -69,6 +69,15 @@ public class ContractController {
         return contractService.findAllLicensesForCurrentUser();
     }
 
+    // Standalone licenses (no linked contract) own their department directly; contract-linked
+    // licenses must be changed via the contract instead (their location is derived from it).
+    @PatchMapping("/licenses/{licenseId}/location")
+    @PreAuthorize("hasAnyRole('ADMIN','EDITOR')")
+    public ContractLicenseView updateLicenseLocation(@PathVariable Integer licenseId,
+            @Valid @RequestBody UpdateLicenseLocationRequest request) {
+        return contractService.updateStandaloneLicenseLocation(licenseId, request.location());
+    }
+
     @PostMapping("/{id}/licenses")
     @ResponseStatus(HttpStatus.CREATED)
     @PreAuthorize("hasAnyRole('ADMIN','EDITOR')")

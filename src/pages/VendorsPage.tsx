@@ -2,6 +2,7 @@ import { Fragment, useEffect, useMemo, useState, type FormEvent } from 'react'
 import { createPortal } from 'react-dom'
 import { client } from '../api'
 import { DepartmentCell, ToolbarDropdown } from '../components'
+import { updateContractDepartment } from '../utils/departments'
 import type { Contract, ContractLicense, Vendor } from '../types'
 import '../styles/contracts.css'
 import { downloadExcel } from '../utils/exportExcel'
@@ -650,7 +651,12 @@ export default function VendorsPage() {
                             onKeyDown={event => { if (event.key === 'Enter' || event.key === ' ') toggleContract(c.id) }}
                           >
                             <td><div className="contract-number">{c.contractNumber}</div><div className="contract-subtitle">{c.softwareName || 'Contract details'}</div></td>
-                            <td onClick={event => event.stopPropagation()}><DepartmentCell contract={c} onSaved={handleDepartmentSaved} /></td>
+                            <td onClick={event => event.stopPropagation()}>
+                              <DepartmentCell
+                                value={c.location ?? ''}
+                                onSave={async value => handleDepartmentSaved(await updateContractDepartment(c, value))}
+                              />
+                            </td>
                             <td className="px-4 py-2 text-[#6b6375]">{c.softwareName || '—'}</td>
                             <td className="px-4 py-2 text-[#6b6375]">{c.startDate || '—'}</td>
                             <td className="px-4 py-2 text-[#6b6375]">{c.endDate || '—'}</td>

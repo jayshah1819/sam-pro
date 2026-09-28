@@ -560,6 +560,43 @@ public class ContractService {
         return findLicenseByIdRaw(tenantId, licenseId);
     }
 
+    // Only standalone licenses (no contract) may have their department edited directly here;
+    // contract-linked licenses derive it from the contract and must be changed there instead.
+    public ContractLicenseView updateStandaloneLicenseLocation(Integer licenseId, String location) {
+        String normalized = location == null || location.isBlank() ? null : location.strip();
+        if (isCurrentUserAdmin()) {
+            Map<String, Object> row = jdbcTemplate.query(
+                    "SELECT tenant_id, contract_id FROM entitlements WHERE license_id = ?",
+                    (rs, rowNum) -> {
+                        Map<String, Object> r = new HashMap<>();
+                        r.put("tenant_id", rs.getObject("tenant_id", Long.class));
+                        r.put("contract_id", rs.getObject("contract_id", Integer.class));
+                        return r;
+                    }, licenseId)
+                    .stream().findFirst()
+                    .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "License not found"));
+            if (row.get("contract_id") != null) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                        "Department follows the linked contract for this license");
+            }
+            Long tenantId = (Long) row.get("tenant_id");
+            jdbcTemplate.update("UPDATE entitlements SET location = ? WHERE license_id = ? AND tenant_id = ?",
+                    normalized, licenseId, tenantId);
+            return findLicenseByIdRaw(tenantId, licenseId);
+        }
+        Long tenantId = TenantContext.get();
+        Entitlement entitlement = entitlementRepository.findByTenantIdAndId(tenantId, licenseId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "License not found"));
+        if (entitlement.getContract() != null) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    "Department follows the linked contract for this license");
+        }
+        entitlement.setLocation(normalized);
+        Entitlement saved = entitlementRepository.saveAndFlush(entitlement);
+        entityManager.clear();
+        return toLicenseView(entitlementRepository.findById(saved.getId()).orElse(saved));
+    }
+
     public void deleteLicense(Integer contractId, Integer licenseId) {
         if (isCurrentUserAdmin()) {
             Long tenantId = resolveTenantIdForContract(contractId);
@@ -642,7 +679,8 @@ public class ContractService {
         entitlement.setItOwner(request.itOwner() == null ? null : request.itOwner().strip());
         entitlement.setBusinessOwner(request.businessOwner() == null ? null : request.businessOwner().strip());
         entitlement.setComments(request.comments() == null ? null : request.comments().strip());
-        entitlement.setLocation(request.contractId() != null || request.location() == null ? null : request.location().strip());
+        entitlement.setLocation(
+                request.contractId() != null || request.location() == null ? null : request.location().strip());
         entitlement.setLicenseType(request.licenseType());
         entitlement.setStatus(
                 request.status() == null ? com.samtracker.entitlement.LicenseStatus.ACTIVE : request.status());
@@ -731,7 +769,8 @@ public class ContractService {
         entitlement.setLicenseName(request.licenseName().strip());
         entitlement.setBusinessOwner(request.businessOwner() == null ? null : request.businessOwner().strip());
         entitlement.setComments(request.comments() == null ? null : request.comments().strip());
-        entitlement.setLocation(request.contractId() != null || request.location() == null ? null : request.location().strip());
+        entitlement.setLocation(
+                request.contractId() != null || request.location() == null ? null : request.location().strip());
         entitlement.setLicenseType(request.licenseType());
         entitlement.setStatus(
                 request.status() == null ? com.samtracker.entitlement.LicenseStatus.ACTIVE : request.status());

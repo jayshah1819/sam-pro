@@ -4,6 +4,7 @@ import { DepartmentCell } from '../components'
 import type { Contract, ContractLicense, Vendor } from '../types'
 import '../styles/contracts.css'
 import { downloadExcel } from '../utils/exportExcel'
+import { updateContractDepartment, updateStandaloneLicenseLocation } from '../utils/departments'
 
 function fmtCurrency(value: number | null) {
   if (value == null) return '—'
@@ -382,7 +383,21 @@ export default function LicensesPage() {
                     <td>{license.vendorName || '—'}</td>
                     <td>{license.softwareName}</td>
                     <td className="font-mono text-xs">{license.contractId ?? '—'}</td>
-                    <td><DepartmentCell contract={license.contractId == null ? null : contractById.get(license.contractId)} onSaved={handleDepartmentSaved} /></td>
+                    <td>
+                      <DepartmentCell
+                        value={license.contractId == null ? (license.location ?? '') : (contractById.get(license.contractId)?.location ?? '')}
+                        onSave={async value => {
+                          if (license.contractId == null) {
+                            const updated = await updateStandaloneLicenseLocation(license.licenseId, value)
+                            setLicenses(prev => prev.map(l => l.licenseId === updated.licenseId ? updated : l))
+                          } else {
+                            const contract = contractById.get(license.contractId)
+                            if (!contract) return
+                            handleDepartmentSaved(await updateContractDepartment(contract, value))
+                          }
+                        }}
+                      />
+                    </td>
                     <td>{license.licenseType.replace('_', ' ')}</td>
                     <td>{license.seatsPurchased ?? '—'}</td>
                     <td>{fmtCurrency(license.price)}</td>

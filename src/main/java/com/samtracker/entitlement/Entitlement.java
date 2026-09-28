@@ -62,7 +62,8 @@ public class Entitlement {
     @Column(name = "business_owner")
     private String businessOwner;
 
-    // Only used for standalone licenses (no contract); contract-linked licenses derive department from Contract.location
+    // Only used for standalone licenses (no contract); contract-linked licenses
+    // derive department from Contract.location
     @Column(name = "location")
     private String location;
 
