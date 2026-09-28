@@ -8,16 +8,6 @@ function fmtCurrency(value: number) {
   return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(value)
 }
 
-// Org chart used to roll subsidiary departments up into their parent.
-// Edit this map if the real department codes/hierarchy differ.
-const DEPARTMENT_TREE: { name: string; children: string[] }[] = [
-  { name: 'FD', children: ['JVS', 'SPC', 'POLICE'] },
-]
-
-const KNOWN_DEPARTMENTS = new Set(
-  DEPARTMENT_TREE.flatMap(node => [node.name, ...node.children]),
-)
-
 type DepartmentNode = {
   key: string
   label: string
@@ -57,6 +47,7 @@ export default function DepartmentsPage() {
       .finally(() => setLoading(false))
   }, [])
 
+  // Flat list: every distinct department/company value is its own top-level entry, no rollup.
   const tree = useMemo<DepartmentNode[]>(() => {
     const byLocation = new Map<string, Contract[]>()
     contracts.forEach(contract => {
@@ -73,28 +64,13 @@ export default function DepartmentsPage() {
       standaloneByLocation.get(key)!.push(license)
     })
 
-    function buildNode(name: string, children: string[]): DepartmentNode {
-      const key = normalize(name)
-      const ownContracts = byLocation.get(key) ?? []
-      const ownStandaloneLicenses = standaloneByLocation.get(key) ?? []
-      const childNodes = children.map(childName => buildNode(childName, []))
-      const allContracts = [...ownContracts, ...childNodes.flatMap(child => child.allContracts)]
-      const allStandaloneLicenses = [...ownStandaloneLicenses, ...childNodes.flatMap(child => child.allStandaloneLicenses)]
-      return { key, label: name, children: childNodes, ownContracts, allContracts, ownStandaloneLicenses, allStandaloneLicenses }
-    }
-
-    const knownNodes = DEPARTMENT_TREE.map(node => buildNode(node.name, node.children))
-
-    // Anything not under a known department/subsidiary still gets its own top-level node
-    // (e.g. "IT", blank company) so no contract or standalone-license data is silently dropped.
-    const otherNodes: DepartmentNode[] = []
-    const otherKeys = new Set([...byLocation.keys(), ...standaloneByLocation.keys()])
-    otherKeys.forEach(key => {
-      if (KNOWN_DEPARTMENTS.has(key)) return
+    const nodes: DepartmentNode[] = []
+    const keys = new Set([...byLocation.keys(), ...standaloneByLocation.keys()])
+    keys.forEach(key => {
       const rows = byLocation.get(key) ?? []
       const standaloneRows = standaloneByLocation.get(key) ?? []
       const label = key === '' ? 'No company set' : (rows[0]?.location ?? standaloneRows[0]?.location ?? key)
-      otherNodes.push({
+      nodes.push({
         key,
         label,
         children: [],
@@ -104,9 +80,9 @@ export default function DepartmentsPage() {
         allStandaloneLicenses: standaloneRows,
       })
     })
-    otherNodes.sort((a, b) => a.label.localeCompare(b.label))
+    nodes.sort((a, b) => a.label.localeCompare(b.label))
 
-    return [...knownNodes, ...otherNodes]
+    return nodes
   }, [contracts, licenses])
 
   const licensesByContractId = useMemo(() => {
@@ -232,7 +208,7 @@ export default function DepartmentsPage() {
       <div className="flex items-baseline justify-between">
         <h1 className="text-lg font-semibold text-[#08060d]">Departments</h1>
       </div>
-      <p className="text-sm text-[#6b6375]">Vendors, licenses and spend grouped by department. Selecting a parent department rolls up all of its subsidiaries.</p>
+      <p className="text-sm text-[#6b6375]">Vendors, licenses and spend grouped by department.</p>
 
       {loading && <p className="px-4 py-6 text-sm text-[#6b6375]">Loading…</p>}
       {error && <p className="px-4 py-6 text-sm text-red-600">{error}</p>}

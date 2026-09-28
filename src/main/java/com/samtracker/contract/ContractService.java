@@ -560,8 +560,10 @@ public class ContractService {
         return findLicenseByIdRaw(tenantId, licenseId);
     }
 
-    // Only standalone licenses (no contract) may have their department edited directly here;
-    // contract-linked licenses derive it from the contract and must be changed there instead.
+    // Only standalone licenses (no contract) may have their department edited
+    // directly here;
+    // contract-linked licenses derive it from the contract and must be changed
+    // there instead.
     public ContractLicenseView updateStandaloneLicenseLocation(Integer licenseId, String location) {
         String normalized = location == null || location.isBlank() ? null : location.strip();
         if (isCurrentUserAdmin()) {
