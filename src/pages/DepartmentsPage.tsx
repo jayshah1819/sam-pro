@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { client } from '../api'
 import type { Contract, ContractLicense } from '../types'
+import { downloadExcel } from '../utils/exportExcel'
 import '../styles/contracts.css'
 
 function fmtCurrency(value: number) {
@@ -124,6 +125,44 @@ export default function DepartmentsPage() {
   const selectedLicenses = selectedNode ? licensesForContracts(selectedNode.allContracts) : []
   const selectedTotal = selectedLicenses.reduce((sum, license) => sum + (license.price ?? 0), 0)
 
+  function exportDeptContracts(node: DepartmentNode) {
+    downloadExcel(`${node.label}-contracts.xlsx`, 'Contracts', node.allContracts.map(contract => ({
+      'Contract #': contract.contractNumber,
+      Vendor: contract.vendorName ?? '',
+      'IT owner': contract.itOwner ?? '',
+      'Business owner': contract.businessOwner ?? '',
+      Department: contract.location ?? '',
+      Software: contract.softwareName ?? '',
+      Start: contract.startDate,
+      End: contract.endDate,
+      Value: contract.value ?? '',
+      Status: contract.status,
+    })))
+  }
+
+  function exportDeptLicenses(node: DepartmentNode) {
+    downloadExcel(`${node.label}-licenses.xlsx`, 'Licenses', licensesForContracts(node.allContracts).map(license => ({
+      'License name': license.licenseName,
+      Vendor: license.vendorName,
+      'IT owner': license.itOwner ?? '',
+      'Business owner': license.businessOwner ?? '',
+      'Software name': license.softwareName,
+      Department: license.location ?? '',
+      Type: license.licenseType,
+      Status: license.status,
+      Seats: license.seatsPurchased ?? '',
+      Price: license.price ?? '',
+      Start: license.startDate,
+      Expiry: license.expiryDate,
+    })))
+  }
+
+  const grandTotalSpend = useMemo(
+    () => licenses.reduce((sum, license) => sum + (license.price ?? 0), 0),
+    [licenses],
+  )
+  const departmentCount = tree.length
+
   function renderNode(node: DepartmentNode, depthLevel: number) {
     const isExpanded = expanded.has(node.key)
     const isSelected = selectedKey === node.key
@@ -140,18 +179,22 @@ export default function DepartmentsPage() {
           onClick={() => setSelectedKey(node.key)}
           onKeyDown={event => { if (event.key === 'Enter' || event.key === ' ') setSelectedKey(node.key) }}
         >
-          {node.children.length > 0 ? (
-            <button
-              type="button"
-              className="dept-tree-toggle"
-              onClick={event => { event.stopPropagation(); toggleExpanded(node.key) }}
-              aria-label={isExpanded ? 'Collapse' : 'Expand'}
-            >
-              {isExpanded ? '▾' : '▸'}
-            </button>
-          ) : <span className="dept-tree-toggle-spacer" />}
-          <span className="dept-tree-label">{node.label}</span>
-          <span className="dept-tree-meta">{node.allContracts.length} contracts · {rollupLicenses.length} licenses · {fmtCurrency(rollupTotal)}</span>
+          <div className="dept-tree-row-main">
+            {node.children.length > 0 ? (
+              <button
+                type="button"
+                className="dept-tree-toggle"
+                onClick={event => { event.stopPropagation(); toggleExpanded(node.key) }}
+                aria-label={isExpanded ? 'Collapse' : 'Expand'}
+              >
+                {isExpanded ? '▾' : '▸'}
+              </button>
+            ) : <span className="dept-tree-toggle-spacer" />}
+            <span className="dept-tree-label">{node.label}</span>
+          </div>
+          <span className="dept-tree-meta">
+            {node.allContracts.length} contract{node.allContracts.length === 1 ? '' : 's'} · {rollupLicenses.length} license{rollupLicenses.length === 1 ? '' : 's'} · {fmtCurrency(rollupTotal)}
+          </span>
         </div>
         {node.children.length > 0 && isExpanded && (
           <div>{node.children.map(child => renderNode(child, depthLevel + 1))}</div>
@@ -161,17 +204,34 @@ export default function DepartmentsPage() {
   }
 
   return (
-    <div className="contracts-page">
-      <div className="contracts-header">
-        <h1>Departments</h1>
-        <p className="contracts-subtitle">Vendors, licenses and spend grouped by department. Selecting a parent department (e.g. FD) rolls up all of its subsidiaries.</p>
+    <div className="departments-preview contracts-preview flex flex-col gap-4">
+      <div className="flex items-baseline justify-between">
+        <h1 className="text-lg font-semibold text-[#08060d]">Departments</h1>
       </div>
+      <p className="text-sm text-[#6b6375]">Vendors, licenses and spend grouped by department. Selecting a parent department rolls up all of its subsidiaries.</p>
 
       {loading && <p className="px-4 py-6 text-sm text-[#6b6375]">Loading…</p>}
       {error && <p className="px-4 py-6 text-sm text-red-600">{error}</p>}
 
       {!loading && !error && (
-        <div className="dept-layout">
+        <>
+          {selectedNode && (
+            <div className="dept-summary-context">
+              <button type="button" className="dept-summary-reset" onClick={() => setSelectedKey(null)}>
+                ← View all departments
+              </button>
+            </div>
+          )}
+          <div className="dept-summary-cards">
+            <div className="dept-summary-card">
+              <small>{selectedNode ? 'Department' : 'Departments'}</small>
+              <strong className={selectedNode ? 'is-text' : ''}>{selectedNode ? selectedNode.label : departmentCount}</strong>
+            </div>
+            <div className="dept-summary-card"><small>Contracts</small><strong>{selectedNode ? selectedNode.allContracts.length : contracts.length}</strong></div>
+            <div className="dept-summary-card"><small>Licenses</small><strong>{selectedNode ? selectedLicenses.length : licenses.length}</strong></div>
+            <div className="dept-summary-card is-spend"><small>Total spend</small><strong>{fmtCurrency(selectedNode ? selectedTotal : grandTotalSpend)}</strong></div>
+          </div>
+          <div className="dept-layout">
           <div className="contracts-panel dept-tree-panel">
             {tree.map(node => renderNode(node, 0))}
           </div>
@@ -181,41 +241,78 @@ export default function DepartmentsPage() {
               <p className="px-4 py-6 text-sm text-[#6b6375]">Select a department to see its licenses and spend.</p>
             ) : (
               <>
-                <div className="dept-detail-head">
-                  <h2>{selectedNode.label}</h2>
-                  <span>{selectedNode.allContracts.length} contracts · {selectedLicenses.length} licenses · {fmtCurrency(selectedTotal)} total</span>
-                </div>
-                <div className="contracts-table-wrap">
-                  <table className="contracts-table licenses-table">
-                    <thead>
-                      <tr>
-                        <th>License</th>
-                        <th>Vendor</th>
-                        <th>Software</th>
-                        <th>Seats</th>
-                        <th>Price</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {selectedLicenses.map(license => (
-                        <tr key={license.licenseId} className="contract-row">
-                          <td className="font-semibold">{license.licenseName}</td>
-                          <td>{license.vendorName || '—'}</td>
-                          <td>{license.softwareName}</td>
-                          <td>{license.seatsPurchased ?? '—'}</td>
-                          <td>{fmtCurrency(license.price ?? 0)}</td>
-                        </tr>
-                      ))}
-                      {selectedLicenses.length === 0 && (
-                        <tr><td colSpan={5} className="py-10 text-center text-[#6b6375]">No licenses found for this department.</td></tr>
-                      )}
-                    </tbody>
-                  </table>
+                <div className="dept-split">
+                  <div className="dept-mini-panel is-contracts">
+                    <div className="dept-mini-panel-head">
+                      <h3>Contracts in {selectedNode.label}</h3>
+                      <button type="button" className="dept-mini-export" title="Export contracts to Excel" aria-label="Export contracts to Excel" onClick={() => exportDeptContracts(selectedNode)}>⤓</button>
+                    </div>
+                    <div className="dept-mini-table-wrap">
+                      <table className="dept-mini-table">
+                        <thead>
+                          <tr>
+                            <th>Contract #</th>
+                            <th>Vendor</th>
+                            <th>Status</th>
+                            <th>Value</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {selectedNode.allContracts.map(contract => (
+                            <tr key={contract.id}>
+                              <td className="font-semibold">{contract.contractNumber}</td>
+                              <td>{contract.vendorName || '—'}</td>
+                              <td>{contract.status}</td>
+                              <td>{fmtCurrency(contract.value ?? 0)}</td>
+                            </tr>
+                          ))}
+                          {selectedNode.allContracts.length === 0 && (
+                            <tr><td colSpan={4} className="dept-mini-empty">No contracts found for this department.</td></tr>
+                          )}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+
+                  <div className="dept-mini-panel is-licenses">
+                    <div className="dept-mini-panel-head">
+                      <h3>Licenses in {selectedNode.label}</h3>
+                      <button type="button" className="dept-mini-export" title="Export licenses to Excel" aria-label="Export licenses to Excel" onClick={() => exportDeptLicenses(selectedNode)}>⤓</button>
+                    </div>
+                    <div className="dept-mini-table-wrap">
+                      <table className="dept-mini-table">
+                        <thead>
+                          <tr>
+                            <th>License</th>
+                            <th>Vendor</th>
+                            <th>Software</th>
+                            <th>Seats</th>
+                            <th>Price</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {selectedLicenses.map(license => (
+                            <tr key={license.licenseId}>
+                              <td className="font-semibold">{license.licenseName}</td>
+                              <td>{license.vendorName || '—'}</td>
+                              <td>{license.softwareName}</td>
+                              <td>{license.seatsPurchased ?? '—'}</td>
+                              <td>{fmtCurrency(license.price ?? 0)}</td>
+                            </tr>
+                          ))}
+                          {selectedLicenses.length === 0 && (
+                            <tr><td colSpan={5} className="dept-mini-empty">No licenses found for this department.</td></tr>
+                          )}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
                 </div>
               </>
             )}
           </div>
         </div>
+        </>
       )}
     </div>
   )

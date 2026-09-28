@@ -1,7 +1,7 @@
 import { Fragment, useEffect, useMemo, useState, type FormEvent } from 'react'
 import { createPortal } from 'react-dom'
 import { client } from '../api'
-import { ToolbarDropdown } from '../components'
+import { DepartmentCell, ToolbarDropdown } from '../components'
 import type { Contract, ContractLicense, Vendor } from '../types'
 import '../styles/contracts.css'
 import { downloadExcel } from '../utils/exportExcel'
@@ -21,11 +21,13 @@ type VendorInsight = {
   totalLicensePrice: number
   contracts: Contract[]
   licenses: ContractLicense[]
+  departments: string[]
 }
 
 type VendorLicenseForm = {
   vendorId: string
   contractId: string
+  location: string
   licenseName: string
   softwareName: string
   version: string
@@ -43,6 +45,7 @@ const VENDOR_PAGE_SIZE = 20
 const EMPTY_VENDOR_LICENSE_FORM: VendorLicenseForm = {
   vendorId: '',
   contractId: '',
+  location: '',
   licenseName: '',
   softwareName: '',
   version: '',
@@ -178,6 +181,7 @@ export default function VendorsPage() {
     try {
       const { data } = await client.post<ContractLicense>(`/vendors/${vendorId}/licenses`, {
         contractId: vendorLicenseForm.contractId ? Number(vendorLicenseForm.contractId) : null,
+        location: vendorLicenseForm.contractId ? null : (vendorLicenseForm.location.trim() || null),
         licenseName: vendorLicenseForm.licenseName.trim(),
         softwareName: vendorLicenseForm.softwareName.trim(),
         version: vendorLicenseForm.version.trim() || null,
@@ -238,6 +242,7 @@ export default function VendorsPage() {
       const vendorLicenses = licenses.filter(license => license.vendorName.toLowerCase() === vendor.name.toLowerCase())
       const totalLicensePrice = vendorLicenses.reduce((sum, license) => sum + (license.price ?? 0), 0)
       vendorContracts.sort((a, b) => (a.startDate < b.startDate ? 1 : -1))
+      const departments = Array.from(new Set(vendorContracts.map(c => (c.location ?? '').trim()).filter(Boolean))).sort()
 
       return {
         vendorKey: vendor.vendorId == null ? vendor.name : String(vendor.vendorId),
@@ -254,6 +259,7 @@ export default function VendorsPage() {
         contracts: vendorContracts,
         licenses: vendorLicenses,
         totalLicensePrice,
+        departments,
       }
     })
 
@@ -302,6 +308,11 @@ export default function VendorsPage() {
 
   function toggleContract(contractId: number) {
     setExpandedContracts(prev => ({ ...prev, [contractId]: !prev[contractId] }))
+  }
+
+  function handleDepartmentSaved(updated: Contract) {
+    setContracts(prev => prev.map(contract => contract.id === updated.id ? updated : contract))
+    setLicenses(prev => prev.map(license => license.contractId === updated.id ? { ...license, location: updated.location } : license))
   }
 
   return (
@@ -449,6 +460,24 @@ export default function VendorsPage() {
                         <small className="contracts-field-hint">This vendor has no contracts yet — the license will be standalone.</small>
                       )}
                     </label>
+                    <label className="contracts-field">
+                      <span>Department</span>
+                      {vendorLicenseForm.contractId ? (
+                        <input
+                          readOnly
+                          disabled
+                          className="contracts-field-readonly"
+                          value={contracts.find(contract => String(contract.id) === vendorLicenseForm.contractId)?.location || 'No department set on contract'}
+                          title="Department follows the linked contract. Change it from the Contracts or Departments tab."
+                        />
+                      ) : (
+                        <input
+                          placeholder="e.g. FD"
+                          value={vendorLicenseForm.location}
+                          onChange={event => setVendorLicenseForm(form => ({ ...form, location: event.target.value }))}
+                        />
+                      )}
+                    </label>
                   </div>
                 </section>
 
@@ -577,6 +606,13 @@ export default function VendorsPage() {
                     <span><small>Address</small>{v.vendorAddress || '—'}</span>
                     <span><small>Website</small>{v.vendorWebsite || '—'}</span>
                   </div>
+                  {v.departments.length > 0 && (
+                    <div className="vendor-dept-chips">
+                      {v.departments.map(department => (
+                        <span key={department} className="vendor-dept-chip">{department}</span>
+                      ))}
+                    </div>
+                  )}
                 </div>
                 <div className="vendor-metrics">
                   <span><small>Licenses</small><strong>{fmtCurrency(v.totalLicensePrice)}</strong></span>
@@ -591,6 +627,7 @@ export default function VendorsPage() {
                   <thead>
                       <tr>
                       <th className="text-left px-4 py-2 font-medium text-[#08060d]">Contract #</th>
+                      <th className="text-left px-4 py-2 font-medium text-[#08060d]">Department</th>
                       <th className="text-left px-4 py-2 font-medium text-[#08060d]">Software</th>
                       <th className="text-left px-4 py-2 font-medium text-[#08060d]">Start</th>
                       <th className="text-left px-4 py-2 font-medium text-[#08060d]">End</th>
@@ -612,7 +649,8 @@ export default function VendorsPage() {
                             onClick={() => toggleContract(c.id)}
                             onKeyDown={event => { if (event.key === 'Enter' || event.key === ' ') toggleContract(c.id) }}
                           >
-                            <td><div className="contract-number">{c.contractNumber}</div><div className="contract-subtitle">{c.softwareName || c.location || 'Contract details'}</div></td>
+                            <td><div className="contract-number">{c.contractNumber}</div><div className="contract-subtitle">{c.softwareName || 'Contract details'}</div></td>
+                            <td onClick={event => event.stopPropagation()}><DepartmentCell contract={c} onSaved={handleDepartmentSaved} /></td>
                             <td className="px-4 py-2 text-[#6b6375]">{c.softwareName || '—'}</td>
                             <td className="px-4 py-2 text-[#6b6375]">{c.startDate || '—'}</td>
                             <td className="px-4 py-2 text-[#6b6375]">{c.endDate || '—'}</td>
@@ -622,6 +660,7 @@ export default function VendorsPage() {
                           {isContractOpen && contractLicenses.map(license => (
                             <tr key={`contract-license-${license.licenseId}`} className="vendor-license-row">
                               <td><div className="contract-subtitle">License</div></td>
+                              <td>—</td>
                               <td>{license.softwareName} — {license.licenseName}</td>
                               <td colSpan={2}>License details</td>
                               <td>{license.price == null ? '—' : fmtCurrency(license.price)}</td>
@@ -634,6 +673,7 @@ export default function VendorsPage() {
                     {standaloneLicenses.map(license => (
                       <tr key={`vendor-license-${license.licenseId}`} className="vendor-license-row">
                         <td><div className="contract-number">Vendor license</div><div className="contract-subtitle">No contract</div></td>
+                        <td>—</td>
                         <td>{license.softwareName} — {license.licenseName}</td>
                         <td colSpan={2}>License details</td>
                         <td>{license.price == null ? '—' : fmtCurrency(license.price)}</td>

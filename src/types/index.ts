@@ -92,6 +92,7 @@ export interface Contract {
 export interface ContractLicense {
   licenseId: number
   contractId: number | null
+  location: string | null
   licenseName: string
   itOwner: string | null
   businessOwner: string | null

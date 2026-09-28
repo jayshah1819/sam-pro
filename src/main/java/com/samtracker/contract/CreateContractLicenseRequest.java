@@ -22,6 +22,7 @@ public record CreateContractLicenseRequest(
         Integer seatsPurchased,
         BigDecimal price,
         Integer contractId,
+        String location,
         LocalDate startDate,
         LocalDate expiryDate) {
 }

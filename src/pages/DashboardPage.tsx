@@ -143,7 +143,7 @@ export default function DashboardPage() {
   }
 
   return (
-    <div className="dashboard-preview contracts-preview flex flex-col gap-4">
+    <div className="dashboard-preview contracts-preview flex flex-col gap-6">
       <div className="flex items-baseline justify-between">
         <h1 className="text-lg font-semibold text-[#08060d]">Dashboard</h1>
       </div>
@@ -203,16 +203,16 @@ export default function DashboardPage() {
                 </div>
                 {expandedSeatKey === group.key && (
                   <div className="dashboard-seat-detail">
-                    <div className="dashboard-seat-detail-row dashboard-seat-detail-head"><span>Contract ID</span><span>Contract</span><span>Seats</span><span>Expires</span></div>
+                    <div className="dashboard-seat-detail-row dashboard-seat-detail-head"><span>Contract</span><span>Seats</span><span>Price</span><span>Expires</span></div>
                     {[...group.licenses].sort((a, b) => a.expiryDate.localeCompare(b.expiryDate)).map(license => (
                       <div className={`dashboard-seat-detail-row${license.expiryDate < today ? ' is-expired' : ''}`} key={license.licenseId}>
-                        <span>{license.contractId ?? '—'}</span>
                         <span>{license.contractId == null ? 'No contract' : contractNumberById.get(String(license.contractId)) ?? '—'}</span>
                         <span>{license.seatsPurchased ?? 0}</span>
+                        <span>{money(license.price)}</span>
                         <span>{expiryLabel(license.expiryDate)}</span>
                       </div>
                     ))}
-                    <div className="dashboard-seat-detail-row dashboard-seat-detail-total"><span>Total</span><span>{group.licenses.length} contracts</span><span>{group.totalSeats}</span><span>seats</span></div>
+                    <div className="dashboard-seat-detail-row dashboard-seat-detail-total"><span>Total</span><span>{group.totalSeats}</span><span>{money(group.licenses.reduce((sum, license) => sum + (license.price ?? 0), 0))}</span><span>{group.licenses.length} contracts</span></div>
                   </div>
                 )}
               </Fragment>

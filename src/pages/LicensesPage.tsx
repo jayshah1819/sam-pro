@@ -1,5 +1,6 @@
 import { Fragment, useEffect, useMemo, useState, type FormEvent } from 'react'
 import { client } from '../api'
+import { DepartmentCell } from '../components'
 import type { Contract, ContractLicense, Vendor } from '../types'
 import '../styles/contracts.css'
 import { downloadExcel } from '../utils/exportExcel'
@@ -14,6 +15,7 @@ const LICENSE_PAGE_SIZE = 20
 type LicenseForm = {
   vendorId: string
   contractId: string
+  location: string
   licenseName: string
   itOwner: string
   businessOwner: string
@@ -30,7 +32,7 @@ type LicenseForm = {
 }
 
 const EMPTY_FORM: LicenseForm = {
-  vendorId: '', contractId: '', licenseName: '', itOwner: '', businessOwner: '', comments: '', softwareName: '', version: '',
+  vendorId: '', contractId: '', location: '', licenseName: '', itOwner: '', businessOwner: '', comments: '', softwareName: '', version: '',
   licenseType: 'PER_SEAT', status: 'ACTIVE', paymentMethod: 'PURCHASE_ORDER', seatsPurchased: '', price: '', startDate: '', expiryDate: '',
 }
 
@@ -73,6 +75,13 @@ export default function LicensesPage() {
       .finally(() => setLoading(false))
   }, [])
 
+  const contractById = useMemo(() => new Map(contracts.map(contract => [contract.id, contract])), [contracts])
+
+  function handleDepartmentSaved(updated: Contract) {
+    setContracts(prev => prev.map(contract => contract.id === updated.id ? updated : contract))
+    setLicenses(prev => prev.map(license => license.contractId === updated.id ? { ...license, location: updated.location } : license))
+  }
+
   const visibleLicenses = useMemo(() => {
     const needle = search.toLowerCase()
     if (!needle) return licenses
@@ -85,6 +94,7 @@ export default function LicensesPage() {
       license.softwareName,
       license.version,
       license.licenseType,
+      license.location ?? '',
     ].join(' ').toLowerCase().includes(needle))
   }, [licenses, search])
 
@@ -116,6 +126,7 @@ export default function LicensesPage() {
       'Business owner': license.businessOwner ?? '',
       'Software name': license.softwareName,
       'Contract ID': license.contractId ?? '',
+      Department: license.location ?? '',
       Type: license.licenseType,
       Status: license.status,
       Payment: license.paymentMethod === 'PURCHASE_ORDER' ? 'PO' : 'Credit card',
@@ -158,6 +169,7 @@ export default function LicensesPage() {
         startDate: form.startDate || null,
         expiryDate: form.expiryDate || null,
         contractId: form.contractId ? Number(form.contractId) : null,
+        location: form.contractId ? null : (form.location.trim() || null),
       }
       const { data } = editingLicenseId == null
         ? await client.post<ContractLicense>(`/vendors/${form.vendorId}/licenses`, payload)
@@ -204,6 +216,7 @@ export default function LicensesPage() {
     setForm({
       vendorId: vendor?.vendorId == null ? '' : String(vendor.vendorId),
       contractId: license.contractId == null ? '' : String(license.contractId),
+      location: license.contractId == null ? (license.location ?? '') : '',
       licenseName: license.licenseName,
       itOwner: license.itOwner ?? '',
       businessOwner: license.businessOwner ?? '',
@@ -301,6 +314,24 @@ export default function LicensesPage() {
                     </div>
                   )}
                 </div>
+                <label className="dashboard-license-readonly-field">
+                  <span>Department</span>
+                  {form.contractId ? (
+                    <input
+                      readOnly
+                      disabled
+                      className="contracts-field-readonly"
+                      value={selectedVendorContracts.find(contract => String(contract.id) === form.contractId)?.location || 'No department set on contract'}
+                      title="Department follows the linked contract. Change it from the Contracts or Departments tab."
+                    />
+                  ) : (
+                    <input
+                      placeholder="e.g. FD"
+                      value={form.location}
+                      onChange={event => setForm(previous => ({ ...previous, location: event.target.value }))}
+                    />
+                  )}
+                </label>
                 <input required placeholder="License name" value={form.licenseName} onChange={event => setForm(previous => ({ ...previous, licenseName: event.target.value }))} />
                 <input placeholder="IT owner" value={form.itOwner} onChange={event => setForm(previous => ({ ...previous, itOwner: event.target.value }))} />
                 <input placeholder="Business owner" value={form.businessOwner} onChange={event => setForm(previous => ({ ...previous, businessOwner: event.target.value }))} />
@@ -332,6 +363,7 @@ export default function LicensesPage() {
                   <th>Vendor</th>
                   <th>Software</th>
                   <th>Contract ID</th>
+                  <th>Department</th>
                   <th>Type</th>
                   <th>Seats</th>
                   <th>Price</th>
@@ -350,6 +382,7 @@ export default function LicensesPage() {
                     <td>{license.vendorName || '—'}</td>
                     <td>{license.softwareName}</td>
                     <td className="font-mono text-xs">{license.contractId ?? '—'}</td>
+                    <td><DepartmentCell contract={license.contractId == null ? null : contractById.get(license.contractId)} onSaved={handleDepartmentSaved} /></td>
                     <td>{license.licenseType.replace('_', ' ')}</td>
                     <td>{license.seatsPurchased ?? '—'}</td>
                     <td>{fmtCurrency(license.price)}</td>
@@ -360,7 +393,7 @@ export default function LicensesPage() {
                   </tr>
                 ))}
                 {visibleLicenses.length === 0 && (
-                  <tr><td colSpan={11} className="py-10 text-center text-[#6b6375]">No licenses found.</td></tr>
+                  <tr><td colSpan={12} className="py-10 text-center text-[#6b6375]">No licenses found.</td></tr>
                 )}
               </tbody>
             </table> : <table className="contracts-table licenses-table">

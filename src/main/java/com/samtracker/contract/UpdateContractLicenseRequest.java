@@ -21,6 +21,7 @@ public record UpdateContractLicenseRequest(
                 Integer seatsPurchased,
                 BigDecimal price,
                 Integer contractId,
+                String location,
                 LocalDate startDate,
                 LocalDate expiryDate,
                 Boolean renew) {

@@ -348,11 +348,12 @@ public class ContractService {
         requireContractRaw(tenantId, contractId);
         return jdbcTemplate.query(
                 """
-                        SELECT e.license_id, e.contract_id, e.license_name, e.it_owner, e.business_owner, e.comments, e.software_id,
+                        SELECT e.license_id, e.contract_id, COALESCE(c.location, e.location) AS location, e.license_name, e.it_owner, e.business_owner, e.comments, e.software_id,
                                s.vendor AS vendor_name, s.name AS software_name, s.version,
                                e.license_type, e.status, e.payment_method, e.seats_purchased, e.price, e.start_date, e.expiry_date
                         FROM entitlements e
                         JOIN software_products s ON s.software_id = e.software_id AND s.tenant_id = e.tenant_id
+                        LEFT JOIN contracts c ON c.contract_id = e.contract_id AND c.tenant_id = e.tenant_id
                         WHERE e.tenant_id = ? AND e.contract_id = ?
                         """,
                 this::mapLicenseRow, tenantId, contractId);
@@ -362,11 +363,12 @@ public class ContractService {
         if (isCurrentUserAdmin()) {
             return jdbcTemplate.query(
                     """
-                            SELECT e.license_id, e.contract_id, e.license_name, e.it_owner, e.business_owner, e.comments, e.software_id,
+                            SELECT e.license_id, e.contract_id, COALESCE(c.location, e.location) AS location, e.license_name, e.it_owner, e.business_owner, e.comments, e.software_id,
                                    s.vendor AS vendor_name, s.name AS software_name, s.version,
                                    e.license_type, e.status, e.payment_method, e.seats_purchased, e.price, e.start_date, e.expiry_date
                             FROM entitlements e
                             JOIN software_products s ON s.software_id = e.software_id AND s.tenant_id = e.tenant_id
+                            LEFT JOIN contracts c ON c.contract_id = e.contract_id AND c.tenant_id = e.tenant_id
                             ORDER BY e.license_id DESC
                             LIMIT 10000
                             """,
@@ -584,11 +586,12 @@ public class ContractService {
             String vendorName = vendorNameRaw(tenantId, vendorId);
             return jdbcTemplate.query(
                     """
-                            SELECT e.license_id, e.contract_id, e.license_name, e.it_owner, e.business_owner, e.comments, e.software_id,
+                            SELECT e.license_id, e.contract_id, COALESCE(c.location, e.location) AS location, e.license_name, e.it_owner, e.business_owner, e.comments, e.software_id,
                                    s.vendor AS vendor_name, s.name AS software_name, s.version,
                                    e.license_type, e.status, e.payment_method, e.seats_purchased, e.price, e.start_date, e.expiry_date
                             FROM entitlements e
                             JOIN software_products s ON s.software_id = e.software_id AND s.tenant_id = e.tenant_id
+                            LEFT JOIN contracts c ON c.contract_id = e.contract_id AND c.tenant_id = e.tenant_id
                             WHERE e.tenant_id = ? AND LOWER(s.vendor) = LOWER(?)
                             """,
                     this::mapLicenseRow, tenantId, vendorName);
@@ -639,6 +642,7 @@ public class ContractService {
         entitlement.setItOwner(request.itOwner() == null ? null : request.itOwner().strip());
         entitlement.setBusinessOwner(request.businessOwner() == null ? null : request.businessOwner().strip());
         entitlement.setComments(request.comments() == null ? null : request.comments().strip());
+        entitlement.setLocation(request.contractId() != null || request.location() == null ? null : request.location().strip());
         entitlement.setLicenseType(request.licenseType());
         entitlement.setStatus(
                 request.status() == null ? com.samtracker.entitlement.LicenseStatus.ACTIVE : request.status());
@@ -689,13 +693,14 @@ public class ContractService {
         jdbcTemplate.update(
                 """
                         INSERT INTO entitlements (tenant_id, software_id, contract_id, license_name, it_owner, business_owner, comments,
-                            license_type, status, payment_method, seats_purchased, price, start_date, expiry_date)
-                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                            location, license_type, status, payment_method, seats_purchased, price, start_date, expiry_date)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                         """,
                 tenantId, softwareId, contractId, licenseName,
                 request.itOwner() == null ? null : request.itOwner().strip(),
                 request.businessOwner() == null ? null : request.businessOwner().strip(),
                 request.comments() == null ? null : request.comments().strip(),
+                contractId != null || request.location() == null ? null : request.location().strip(),
                 request.licenseType().name(), status, paymentMethod, request.seatsPurchased(), request.price(),
                 startDate, expiryDate);
 
@@ -726,6 +731,7 @@ public class ContractService {
         entitlement.setLicenseName(request.licenseName().strip());
         entitlement.setBusinessOwner(request.businessOwner() == null ? null : request.businessOwner().strip());
         entitlement.setComments(request.comments() == null ? null : request.comments().strip());
+        entitlement.setLocation(request.contractId() != null || request.location() == null ? null : request.location().strip());
         entitlement.setLicenseType(request.licenseType());
         entitlement.setStatus(
                 request.status() == null ? com.samtracker.entitlement.LicenseStatus.ACTIVE : request.status());
@@ -833,13 +839,15 @@ public class ContractService {
         jdbcTemplate.update(
                 """
                         UPDATE entitlements
-                        SET software_id = ?, contract_id = ?, license_name = ?, business_owner = ?, comments = ?, license_type = ?, status = ?,
+                        SET software_id = ?, contract_id = ?, license_name = ?, business_owner = ?, comments = ?, location = ?, license_type = ?, status = ?,
                             payment_method = ?, seats_purchased = ?, price = ?, start_date = ?, expiry_date = ?
                         WHERE license_id = ? AND tenant_id = ?
                         """,
                 softwareId, contractId, request.licenseName().strip(),
                 request.businessOwner() == null ? null : request.businessOwner().strip(),
-                request.comments() == null ? null : request.comments().strip(), request.licenseType().name(), status,
+                request.comments() == null ? null : request.comments().strip(),
+                contractId != null || request.location() == null ? null : request.location().strip(),
+                request.licenseType().name(), status,
                 paymentMethod, request.seatsPurchased(), request.price(), startDate, expiryDate, licenseId, tenantId);
 
         return findLicenseByIdRaw(tenantId, licenseId);
@@ -1038,11 +1046,12 @@ public class ContractService {
     private ContractLicenseView findLicenseByIdRaw(Long tenantId, Integer licenseId) {
         List<ContractLicenseView> rows = jdbcTemplate.query(
                 """
-                        SELECT e.license_id, e.contract_id, e.license_name, e.it_owner, e.business_owner, e.comments, e.software_id,
+                        SELECT e.license_id, e.contract_id, COALESCE(c.location, e.location) AS location, e.license_name, e.it_owner, e.business_owner, e.comments, e.software_id,
                                s.vendor AS vendor_name, s.name AS software_name, s.version,
                                e.license_type, e.status, e.payment_method, e.seats_purchased, e.price, e.start_date, e.expiry_date
                         FROM entitlements e
                         JOIN software_products s ON s.software_id = e.software_id AND s.tenant_id = e.tenant_id
+                        LEFT JOIN contracts c ON c.contract_id = e.contract_id AND c.tenant_id = e.tenant_id
                         WHERE e.tenant_id = ? AND e.license_id = ?
                         """,
                 this::mapLicenseRow, tenantId, licenseId);
@@ -1056,6 +1065,7 @@ public class ContractService {
         return new ContractLicenseView(
                 (Integer) rs.getObject("license_id"),
                 (Integer) rs.getObject("contract_id"),
+                rs.getString("location"),
                 rs.getString("license_name"),
                 rs.getString("it_owner"),
                 rs.getString("business_owner"),
@@ -1095,6 +1105,7 @@ public class ContractService {
         return new ContractLicenseView(
                 entitlement.getLicenseId(),
                 entitlement.getContract() == null ? null : entitlement.getContract().getId(),
+                entitlement.getContract() == null ? entitlement.getLocation() : entitlement.getContract().getLocation(),
                 entitlement.getLicenseName(),
                 entitlement.getItOwner(),
                 entitlement.getBusinessOwner(),

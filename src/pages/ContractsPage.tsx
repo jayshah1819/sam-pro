@@ -497,7 +497,7 @@ export default function ContractsPage() {
       'Vendor JDE': contract.vendorJDENumber ?? contract.vendor?.vendorJDENumber ?? '',
       'IT owner': contract.itOwner ?? '',
       'Business owner': contract.businessOwner ?? '',
-      Company: contract.location ?? '',
+      Department: contract.location ?? '',
       Software: contract.softwareName ?? '',
       Start: contract.startDate,
       End: contract.endDate,
@@ -669,7 +669,7 @@ export default function ContractsPage() {
                       <h3 className="contracts-field-section-title">Details</h3>
                       <div className="contracts-field-grid contracts-field-grid-3">
                         <label className="contracts-field">
-                          <span>Company</span>
+                          <span>Department</span>
                           <input value={addForm.location} onChange={e => setAddForm(f => ({ ...f, location: e.target.value }))} placeholder="Optional" />
                         </label>
                         <label className="contracts-field">
@@ -793,7 +793,7 @@ export default function ContractsPage() {
                   <th className="text-left px-4 py-3 font-medium text-[#08060d]">Vendor</th>
                   <th className="text-left px-4 py-3 font-medium text-[#08060d]">Vendor JDE</th>
                   <th className="text-left px-4 py-3 font-medium text-[#08060d]">Software</th>
-                  <th className="text-left px-4 py-3 font-medium text-[#08060d]">Company</th>
+                  <th className="text-left px-4 py-3 font-medium text-[#08060d]">Department</th>
                   <th className="text-left px-4 py-3 font-medium text-[#08060d]">IT owner</th>
                   <th className="text-left px-4 py-3 font-medium text-[#08060d]">Business owner</th>
                   <th className="text-left px-4 py-3 font-medium text-[#08060d]">Start</th>
@@ -843,7 +843,7 @@ export default function ContractsPage() {
                           <input
                             value={editForm.location}
                             onChange={e => setEditForm(f => ({ ...f, location: e.target.value }))}
-                            placeholder="Company"
+                            placeholder="Department"
                           />
                         </td>
                         <td>
