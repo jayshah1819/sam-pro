@@ -108,6 +108,37 @@ export interface ContractLicense {
   price: number | null
   startDate: string
   expiryDate: string
+  softwareCode: string | null
+  vendorId: number | null
+  functionalGrouping: string | null
+  functionalOwner: string | null
+  confidenceLevel: string | null
+  manufacturerName: string | null
+  systemCategory: string | null
+  systemCategorization: string | null
+  businessCriticality: string | null
+  systemStrategy: string | null
+  erpSystem: string | null
+  annualInfrastructureCost: number | null
+  annualCostNonLicense: number | null
+  annualLicenseCost: number | null
+  annualCostTotal: number | null
+  acsBudget: number | null
+  numberOfActiveUsers: number | null
+  numberOfLicensesOwned: number | null
+  proposedFunctionGroupOwner: string | null
+  billingVendor: string | null
+  billingVendorId: number | null
+  businessFunction: string | null
+  numberOfUsers: number | null
+  budgetOwner: string | null
+  primaryItGroup: string | null
+  primaryItGroupLeadership: string | null
+  contractDuration: string | null
+  paymentSchedule: string | null
+  currency: string | null
+  criticalityLevels: string | null
+  description: string | null
 }
 
 export interface AppData {
@@ -131,4 +162,58 @@ export interface VendorSoftwareSummary {
   vendor: string
   count: number
 }
+
+export interface FinanceRow {
+  id: number
+  softwareCode: string
+  tenantId: number
+  sourceBudget: string | null
+  primaryCategory: string | null
+  subCategory: string | null
+  businessCriticality: string | null
+  strategy: string | null
+  erp: string | null
+  costCode: string | null
+  location: string | null
+  vendorId: number | null
+  softwareName: string | null
+  baselineBudget: number | null
+  softwareSpend: number | null
+  actuals: number | null
+  remaining: number | null
+  managedServiceProviders: number | null
+  itStaffInternalLabour: number | null
+  itStaffExternalLabour: number | null
+  depreciationAmortisation: number | null
+  cloudSolutions: number | null
+  consultingOutsideServices: number | null
+  totalTco: number | null
+  costRecoveries: number | null
+}
+
+export interface FinanceCategory {
+  id: number
+  primaryCategory: string
+  subCategory: string
+}
+
+export interface FinanceViewOptions {
+  businessCriticality: string[]
+  strategy: string[]
+}
+
+export interface InventoryRow {
+  id: number
+  companyGroup: string | null
+  companyNameDivision: string | null
+  systemFunctionality: string | null
+  manufacturerName: string | null
+  vendorName: string | null
+  softwareName: string | null
+  totalSoftwareSpend: number | null
+  currency: string | null
+  softwareCode: string
+  comments: string | null
+}
+
 

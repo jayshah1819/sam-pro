@@ -36,6 +36,25 @@ import java.util.function.Supplier;
 @Service
 public class ContractService {
 
+    // Shared column list for the raw-SQL admin/cross-tenant license lookups;
+    // each call site appends its own WHERE/ORDER clause.
+    private static final String LICENSE_SELECT_SQL = """
+            SELECT e.license_id, e.contract_id, COALESCE(c.location, e.location) AS location, e.license_name, e.it_owner, e.business_owner, e.comments, e.software_id,
+                   s.vendor AS vendor_name, s.name AS software_name, s.version,
+                   e.license_type, e.status, e.payment_method, e.seats_purchased, e.price, e.start_date, e.expiry_date,
+                   e.software_code, e.vendor_id, e.functional_grouping, e.functional_owner, e.confidence_level,
+                   e.manufacturer_name, e.system_category, e.system_categorization, e.business_criticality,
+                   e.system_strategy, e.erp_system, e.annual_infrastructure_cost, e.annual_cost_non_license,
+                   e.annual_license_cost, e.annual_cost_total, e.acs_budget, e.number_of_active_users,
+                   e.number_of_licenses_owned, e.proposed_function_group_owner, e.billing_vendor,
+                   e.billing_vendor_id, e.business_function, e.number_of_users, e.budget_owner,
+                   e.primary_it_group, e.primary_it_group_leadership, e.contract_duration,
+                   e.payment_schedule, e.currency, e.criticality_levels, e.description
+            FROM entitlements e
+            JOIN software_products s ON s.software_id = e.software_id AND s.tenant_id = e.tenant_id
+            LEFT JOIN contracts c ON c.contract_id = e.contract_id AND c.tenant_id = e.tenant_id
+            """;
+
     private final ContractRepository contractRepository;
     private final VendorRepository vendorRepository;
     private final EntitlementRepository entitlementRepository;
@@ -55,6 +74,42 @@ public class ContractService {
         this.softwareProductRepository = softwareProductRepository;
         this.jdbcTemplate = jdbcTemplate;
         this.entityManager = entityManager;
+    }
+
+    // Keeps every License row's Annual License Cost in sync with Finance's
+    // Software Spend for the same software code, so budget entered/edited on the
+    // Finance Detailed tab flows through to the Licenses tab automatically.
+    // Raw SQL (not JPA) so it works regardless of which tenant session is bound.
+    public void syncAnnualLicenseCostFromFinance(Long tenantId, String softwareCode, BigDecimal annualLicenseCost) {
+        if (tenantId == null || softwareCode == null || softwareCode.isBlank()) {
+            return;
+        }
+        jdbcTemplate.update(
+                "UPDATE entitlements SET annual_license_cost = ? WHERE tenant_id = ? AND software_code = ?",
+                annualLicenseCost, tenantId, softwareCode);
+    }
+
+    // Reverse direction: adding/editing a License with a software code rolls its
+    // Annual License Cost out into the Finance Detailed tab too, creating a
+    // minimal finance_view row if none exists yet for this code. Raw SQL directly
+    // against finance_view (not FinanceViewService) to avoid a circular bean
+    // dependency between ContractService and FinanceViewService.
+    private void syncFinanceFromLicense(Long tenantId, String softwareCode, String softwareName, Integer vendorId,
+            BigDecimal annualLicenseCost) {
+        String code = softwareCode == null ? "" : softwareCode.strip();
+        if (tenantId == null || code.isBlank()) {
+            return;
+        }
+        int updated = jdbcTemplate.update(
+                "UPDATE finance_view SET software_spend = ? WHERE tenant_id = ? AND software_code = ? "
+                        + "AND cost_code IS NULL",
+                annualLicenseCost, tenantId, code);
+        if (updated == 0) {
+            jdbcTemplate.update(
+                    "INSERT INTO finance_view (software_code, tenant_id, software_name, vendor_id, software_spend) "
+                            + "VALUES (?, ?, ?, ?, ?)",
+                    code, tenantId, softwareName, vendorId, annualLicenseCost);
+        }
     }
 
     // Admin-only listing (see ContractController @PreAuthorize) — intentionally not
@@ -347,31 +402,14 @@ public class ContractService {
     private List<ContractLicenseView> findLicensesRaw(Long tenantId, Integer contractId) {
         requireContractRaw(tenantId, contractId);
         return jdbcTemplate.query(
-                """
-                        SELECT e.license_id, e.contract_id, COALESCE(c.location, e.location) AS location, e.license_name, e.it_owner, e.business_owner, e.comments, e.software_id,
-                               s.vendor AS vendor_name, s.name AS software_name, s.version,
-                               e.license_type, e.status, e.payment_method, e.seats_purchased, e.price, e.start_date, e.expiry_date
-                        FROM entitlements e
-                        JOIN software_products s ON s.software_id = e.software_id AND s.tenant_id = e.tenant_id
-                        LEFT JOIN contracts c ON c.contract_id = e.contract_id AND c.tenant_id = e.tenant_id
-                        WHERE e.tenant_id = ? AND e.contract_id = ?
-                        """,
+                LICENSE_SELECT_SQL + " WHERE e.tenant_id = ? AND e.contract_id = ?",
                 this::mapLicenseRow, tenantId, contractId);
     }
 
     public List<ContractLicenseView> findAllLicensesForCurrentUser() {
         if (isCurrentUserAdmin()) {
             return jdbcTemplate.query(
-                    """
-                            SELECT e.license_id, e.contract_id, COALESCE(c.location, e.location) AS location, e.license_name, e.it_owner, e.business_owner, e.comments, e.software_id,
-                                   s.vendor AS vendor_name, s.name AS software_name, s.version,
-                                   e.license_type, e.status, e.payment_method, e.seats_purchased, e.price, e.start_date, e.expiry_date
-                            FROM entitlements e
-                            JOIN software_products s ON s.software_id = e.software_id AND s.tenant_id = e.tenant_id
-                            LEFT JOIN contracts c ON c.contract_id = e.contract_id AND c.tenant_id = e.tenant_id
-                            ORDER BY e.license_id DESC
-                            LIMIT 10000
-                            """,
+                    LICENSE_SELECT_SQL + " ORDER BY e.license_id DESC LIMIT 10000",
                     this::mapLicenseRow);
         }
         Long tenantId = TenantContext.get();
@@ -420,6 +458,7 @@ public class ContractService {
             entitlement.setBusinessOwner(contract.getBusinessOwner());
             entitlement.setComments(request.comments() == null ? null : request.comments().strip());
             entitlement.setSoftwareProduct(software);
+            entitlement.setSoftwareCode(String.valueOf(software.getSoftwareId()));
             entitlement.setLicenseType(request.licenseType());
             entitlement.setStatus(
                     request.status() == null ? com.samtracker.entitlement.LicenseStatus.ACTIVE : request.status());
@@ -430,8 +469,12 @@ public class ContractService {
             entitlement.setPrice(request.price());
             entitlement.setStartDate(contract.getStartDate());
             entitlement.setExpiryDate(contract.getEndDate());
+            entitlement.setVendorId(contract.getVendorId());
+            applyExtendedFields(entitlement, request);
             Entitlement saved = entitlementRepository.saveAndFlush(entitlement);
             entityManager.clear();
+            syncFinanceFromLicense(tenantId, entitlement.getSoftwareCode(), softwareName, contract.getVendorId(),
+                    request.annualLicenseCost());
             return toLicenseView(entitlementRepository.findById(saved.getId()).orElse(saved));
         });
     }
@@ -459,20 +502,27 @@ public class ContractService {
                 ? com.samtracker.entitlement.PaymentMethod.PURCHASE_ORDER
                 : request.paymentMethod()).name();
 
+        Object[] extendedValues = extendedFieldValues(request);
+        extendedValues[0] = String.valueOf(softwareId);
         jdbcTemplate.update(
-                """
-                        INSERT INTO entitlements (tenant_id, software_id, contract_id, license_name, it_owner, business_owner, comments,
-                            license_type, status, payment_method, seats_purchased, price, start_date, expiry_date)
-                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                        """,
-                tenantId, softwareId, contractId, licenseName, itOwner, businessOwner,
-                request.comments() == null ? null : request.comments().strip(),
-                request.licenseType().name(), status, paymentMethod, request.seatsPurchased(), request.price(),
-                startDate, endDate);
+                "INSERT INTO entitlements (tenant_id, software_id, contract_id, license_name, it_owner, business_owner, comments, "
+                        + "license_type, status, payment_method, seats_purchased, price, start_date, expiry_date, vendor_id, "
+                        + EXTENDED_LICENSE_INSERT_COLUMNS
+                        + ") VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, "
+                        + EXTENDED_LICENSE_INSERT_PLACEHOLDERS + ")",
+                concatArrays(new Object[] {
+                        tenantId, softwareId, contractId, licenseName, itOwner, businessOwner,
+                        request.comments() == null ? null : request.comments().strip(),
+                        request.licenseType().name(), status, paymentMethod, request.seatsPurchased(),
+                        request.price(), startDate, endDate, contractRow.get("vendor_id") },
+                        extendedValues));
 
         Integer licenseId = jdbcTemplate.queryForObject(
                 "SELECT license_id FROM entitlements WHERE tenant_id = ? AND contract_id = ? ORDER BY license_id DESC LIMIT 1",
                 Integer.class, tenantId, contractId);
+        syncFinanceFromLicense(tenantId, String.valueOf(softwareId), softwareName,
+                (Integer) contractRow.get("vendor_id"),
+                request.annualLicenseCost());
         return findLicenseByIdRaw(tenantId, licenseId);
     }
 
@@ -508,6 +558,7 @@ public class ContractService {
                     : contract.getVendorName();
             SoftwareProduct software = findOrCreateSoftware(tenantId, softwareName, vendorName, request.version());
             entitlement.setSoftwareProduct(software);
+            entitlement.setSoftwareCode(String.valueOf(software.getSoftwareId()));
             entitlement.setLicenseName(licenseName);
             entitlement.setItOwner(contract.getItOwner());
             entitlement.setBusinessOwner(contract.getBusinessOwner());
@@ -522,8 +573,12 @@ public class ContractService {
             entitlement.setPrice(request.price());
             entitlement.setStartDate(contract.getStartDate());
             entitlement.setExpiryDate(contract.getEndDate());
+            entitlement.setVendorId(contract.getVendorId());
+            applyExtendedFields(entitlement, request);
             Entitlement saved = entitlementRepository.saveAndFlush(entitlement);
             entityManager.clear();
+            syncFinanceFromLicense(tenantId, entitlement.getSoftwareCode(), softwareName, contract.getVendorId(),
+                    request.annualLicenseCost());
             return toLicenseView(entitlementRepository.findById(saved.getId()).orElse(saved));
         });
     }
@@ -544,19 +599,24 @@ public class ContractService {
         String paymentMethod = (request.paymentMethod() == null
                 ? com.samtracker.entitlement.PaymentMethod.PURCHASE_ORDER
                 : request.paymentMethod()).name();
+        Object[] extendedValues = extendedFieldValues(request);
+        extendedValues[0] = String.valueOf(softwareId);
 
         jdbcTemplate.update(
-                """
-                        UPDATE entitlements
-                        SET software_id = ?, license_name = ?, it_owner = ?, business_owner = ?, comments = ?, license_type = ?, status = ?,
-                            payment_method = ?, seats_purchased = ?, price = ?, start_date = ?, expiry_date = ?
-                        WHERE license_id = ? AND tenant_id = ?
-                        """,
-                softwareId, licenseName, itOwner, businessOwner,
-                request.comments() == null ? null : request.comments().strip(),
-                request.licenseType().name(), status, paymentMethod, request.seatsPurchased(), request.price(),
-                startDate, endDate, licenseId, tenantId);
+                "UPDATE entitlements SET software_id = ?, license_name = ?, it_owner = ?, business_owner = ?, comments = ?, license_type = ?, status = ?, "
+                        + "payment_method = ?, seats_purchased = ?, price = ?, start_date = ?, expiry_date = ?, vendor_id = ?, "
+                        + EXTENDED_LICENSE_UPDATE_ASSIGNMENTS
+                        + " WHERE license_id = ? AND tenant_id = ?",
+                concatArrays(new Object[] {
+                        softwareId, licenseName, itOwner, businessOwner,
+                        request.comments() == null ? null : request.comments().strip(),
+                        request.licenseType().name(), status, paymentMethod, request.seatsPurchased(),
+                        request.price(), startDate, endDate, contractRow.get("vendor_id") },
+                        concatArrays(extendedValues, new Object[] { licenseId, tenantId })));
 
+        syncFinanceFromLicense(tenantId, String.valueOf(softwareId), softwareName,
+                (Integer) contractRow.get("vendor_id"),
+                request.annualLicenseCost());
         return findLicenseByIdRaw(tenantId, licenseId);
     }
 
@@ -624,15 +684,7 @@ public class ContractService {
             Long tenantId = resolveTenantIdForVendor(vendorId);
             String vendorName = vendorNameRaw(tenantId, vendorId);
             return jdbcTemplate.query(
-                    """
-                            SELECT e.license_id, e.contract_id, COALESCE(c.location, e.location) AS location, e.license_name, e.it_owner, e.business_owner, e.comments, e.software_id,
-                                   s.vendor AS vendor_name, s.name AS software_name, s.version,
-                                   e.license_type, e.status, e.payment_method, e.seats_purchased, e.price, e.start_date, e.expiry_date
-                            FROM entitlements e
-                            JOIN software_products s ON s.software_id = e.software_id AND s.tenant_id = e.tenant_id
-                            LEFT JOIN contracts c ON c.contract_id = e.contract_id AND c.tenant_id = e.tenant_id
-                            WHERE e.tenant_id = ? AND LOWER(s.vendor) = LOWER(?)
-                            """,
+                    LICENSE_SELECT_SQL + " WHERE e.tenant_id = ? AND LOWER(s.vendor) = LOWER(?)",
                     this::mapLicenseRow, tenantId, vendorName);
         }
         Long tenantId = TenantContext.get();
@@ -677,6 +729,7 @@ public class ContractService {
             entitlement.setExpiryDate(request.expiryDate() == null ? LocalDate.of(9999, 12, 31) : request.expiryDate());
         }
         entitlement.setSoftwareProduct(software);
+        entitlement.setSoftwareCode(String.valueOf(software.getSoftwareId()));
         entitlement.setLicenseName(request.licenseName().strip());
         entitlement.setItOwner(request.itOwner() == null ? null : request.itOwner().strip());
         entitlement.setBusinessOwner(request.businessOwner() == null ? null : request.businessOwner().strip());
@@ -691,7 +744,11 @@ public class ContractService {
                         : request.paymentMethod());
         entitlement.setSeatsPurchased(request.seatsPurchased());
         entitlement.setPrice(request.price());
+        entitlement.setVendorId(vendorId);
+        applyExtendedFields(entitlement, request);
         Entitlement saved = entitlementRepository.saveAndFlush(entitlement);
+        syncFinanceFromLicense(tenantId, entitlement.getSoftwareCode(), request.softwareName().strip(), vendorId,
+                request.annualLicenseCost());
         return toLicenseView(entitlementRepository.findById(saved.getId()).orElse(saved));
     }
 
@@ -729,24 +786,30 @@ public class ContractService {
         String paymentMethod = (request.paymentMethod() == null
                 ? com.samtracker.entitlement.PaymentMethod.PURCHASE_ORDER
                 : request.paymentMethod()).name();
+        Object[] extendedValues = extendedFieldValues(request);
+        extendedValues[0] = String.valueOf(softwareId);
 
         jdbcTemplate.update(
-                """
-                        INSERT INTO entitlements (tenant_id, software_id, contract_id, license_name, it_owner, business_owner, comments,
-                            location, license_type, status, payment_method, seats_purchased, price, start_date, expiry_date)
-                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                        """,
-                tenantId, softwareId, contractId, licenseName,
-                request.itOwner() == null ? null : request.itOwner().strip(),
-                request.businessOwner() == null ? null : request.businessOwner().strip(),
-                request.comments() == null ? null : request.comments().strip(),
-                contractId != null || request.location() == null ? null : request.location().strip(),
-                request.licenseType().name(), status, paymentMethod, request.seatsPurchased(), request.price(),
-                startDate, expiryDate);
+                "INSERT INTO entitlements (tenant_id, software_id, contract_id, license_name, it_owner, business_owner, comments, "
+                        + "location, license_type, status, payment_method, seats_purchased, price, start_date, expiry_date, vendor_id, "
+                        + EXTENDED_LICENSE_INSERT_COLUMNS
+                        + ") VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, "
+                        + EXTENDED_LICENSE_INSERT_PLACEHOLDERS + ")",
+                concatArrays(new Object[] {
+                        tenantId, softwareId, contractId, licenseName,
+                        request.itOwner() == null ? null : request.itOwner().strip(),
+                        request.businessOwner() == null ? null : request.businessOwner().strip(),
+                        request.comments() == null ? null : request.comments().strip(),
+                        contractId != null || request.location() == null ? null : request.location().strip(),
+                        request.licenseType().name(), status, paymentMethod, request.seatsPurchased(),
+                        request.price(), startDate, expiryDate, vendorId },
+                        extendedValues));
 
         Integer licenseId = jdbcTemplate.queryForObject(
                 "SELECT license_id FROM entitlements WHERE tenant_id = ? AND software_id = ? ORDER BY license_id DESC LIMIT 1",
                 Integer.class, tenantId, softwareId);
+        syncFinanceFromLicense(tenantId, String.valueOf(softwareId), softwareName, vendorId,
+                request.annualLicenseCost());
         return findLicenseByIdRaw(tenantId, licenseId);
     }
 
@@ -768,6 +831,7 @@ public class ContractService {
         SoftwareProduct software = findOrCreateSoftware(tenantId, request.softwareName().strip(), vendor.getName(),
                 request.version());
         entitlement.setSoftwareProduct(software);
+        entitlement.setSoftwareCode(String.valueOf(software.getSoftwareId()));
         entitlement.setLicenseName(request.licenseName().strip());
         entitlement.setBusinessOwner(request.businessOwner() == null ? null : request.businessOwner().strip());
         entitlement.setComments(request.comments() == null ? null : request.comments().strip());
@@ -781,6 +845,8 @@ public class ContractService {
                         : request.paymentMethod());
         entitlement.setSeatsPurchased(request.seatsPurchased());
         entitlement.setPrice(request.price());
+        entitlement.setVendorId(vendorId);
+        applyExtendedFields(entitlement, request);
         if (request.contractId() != null) {
             Contract contract = requireContract(request.contractId(), tenantId);
             if (!vendorId.equals(contract.getVendorId())) {
@@ -815,6 +881,8 @@ public class ContractService {
             entitlement.setExpiryDate(expiryDate);
         }
         Entitlement saved = entitlementRepository.saveAndFlush(entitlement);
+        syncFinanceFromLicense(tenantId, entitlement.getSoftwareCode(), request.softwareName().strip(), vendorId,
+                request.annualLicenseCost());
         return toLicenseView(entitlementRepository.findById(saved.getId()).orElse(saved));
     }
 
@@ -876,21 +944,25 @@ public class ContractService {
         String paymentMethod = (request.paymentMethod() == null
                 ? com.samtracker.entitlement.PaymentMethod.PURCHASE_ORDER
                 : request.paymentMethod()).name();
+        Object[] extendedValues = extendedFieldValues(request);
+        extendedValues[0] = String.valueOf(softwareId);
 
         jdbcTemplate.update(
-                """
-                        UPDATE entitlements
-                        SET software_id = ?, contract_id = ?, license_name = ?, business_owner = ?, comments = ?, location = ?, license_type = ?, status = ?,
-                            payment_method = ?, seats_purchased = ?, price = ?, start_date = ?, expiry_date = ?
-                        WHERE license_id = ? AND tenant_id = ?
-                        """,
-                softwareId, contractId, request.licenseName().strip(),
-                request.businessOwner() == null ? null : request.businessOwner().strip(),
-                request.comments() == null ? null : request.comments().strip(),
-                contractId != null || request.location() == null ? null : request.location().strip(),
-                request.licenseType().name(), status,
-                paymentMethod, request.seatsPurchased(), request.price(), startDate, expiryDate, licenseId, tenantId);
+                "UPDATE entitlements SET software_id = ?, contract_id = ?, license_name = ?, business_owner = ?, comments = ?, location = ?, license_type = ?, status = ?, "
+                        + "payment_method = ?, seats_purchased = ?, price = ?, start_date = ?, expiry_date = ?, vendor_id = ?, "
+                        + EXTENDED_LICENSE_UPDATE_ASSIGNMENTS
+                        + " WHERE license_id = ? AND tenant_id = ?",
+                concatArrays(new Object[] {
+                        softwareId, contractId, request.licenseName().strip(),
+                        request.businessOwner() == null ? null : request.businessOwner().strip(),
+                        request.comments() == null ? null : request.comments().strip(),
+                        contractId != null || request.location() == null ? null : request.location().strip(),
+                        request.licenseType().name(), status,
+                        paymentMethod, request.seatsPurchased(), request.price(), startDate, expiryDate, vendorId },
+                        concatArrays(extendedValues, new Object[] { licenseId, tenantId })));
 
+        syncFinanceFromLicense(tenantId, String.valueOf(softwareId), softwareName, vendorId,
+                request.annualLicenseCost());
         return findLicenseByIdRaw(tenantId, licenseId);
     }
 
@@ -1086,15 +1158,7 @@ public class ContractService {
 
     private ContractLicenseView findLicenseByIdRaw(Long tenantId, Integer licenseId) {
         List<ContractLicenseView> rows = jdbcTemplate.query(
-                """
-                        SELECT e.license_id, e.contract_id, COALESCE(c.location, e.location) AS location, e.license_name, e.it_owner, e.business_owner, e.comments, e.software_id,
-                               s.vendor AS vendor_name, s.name AS software_name, s.version,
-                               e.license_type, e.status, e.payment_method, e.seats_purchased, e.price, e.start_date, e.expiry_date
-                        FROM entitlements e
-                        JOIN software_products s ON s.software_id = e.software_id AND s.tenant_id = e.tenant_id
-                        LEFT JOIN contracts c ON c.contract_id = e.contract_id AND c.tenant_id = e.tenant_id
-                        WHERE e.tenant_id = ? AND e.license_id = ?
-                        """,
+                LICENSE_SELECT_SQL + " WHERE e.tenant_id = ? AND e.license_id = ?",
                 this::mapLicenseRow, tenantId, licenseId);
         if (rows.isEmpty()) {
             throw new ResponseStatusException(HttpStatus.NOT_FOUND, "License not found");
@@ -1121,7 +1185,38 @@ public class ContractService {
                 (Integer) rs.getObject("seats_purchased"),
                 rs.getBigDecimal("price"),
                 rs.getObject("start_date", LocalDate.class),
-                rs.getObject("expiry_date", LocalDate.class));
+                rs.getObject("expiry_date", LocalDate.class),
+                rs.getString("software_code"),
+                (Integer) rs.getObject("vendor_id"),
+                rs.getString("functional_grouping"),
+                rs.getString("functional_owner"),
+                rs.getString("confidence_level"),
+                rs.getString("manufacturer_name"),
+                rs.getString("system_category"),
+                rs.getString("system_categorization"),
+                rs.getString("business_criticality"),
+                rs.getString("system_strategy"),
+                rs.getString("erp_system"),
+                rs.getBigDecimal("annual_infrastructure_cost"),
+                rs.getBigDecimal("annual_cost_non_license"),
+                rs.getBigDecimal("annual_license_cost"),
+                rs.getBigDecimal("annual_cost_total"),
+                rs.getBigDecimal("acs_budget"),
+                (Integer) rs.getObject("number_of_active_users"),
+                (Integer) rs.getObject("number_of_licenses_owned"),
+                rs.getString("proposed_function_group_owner"),
+                rs.getString("billing_vendor"),
+                (Integer) rs.getObject("billing_vendor_id"),
+                rs.getString("business_function"),
+                (Integer) rs.getObject("number_of_users"),
+                rs.getString("budget_owner"),
+                rs.getString("primary_it_group"),
+                rs.getString("primary_it_group_leadership"),
+                rs.getString("contract_duration"),
+                rs.getString("payment_schedule"),
+                rs.getString("currency"),
+                rs.getString("criticality_levels"),
+                rs.getString("description"));
     }
 
     private SoftwareProduct findOrCreateSoftware(Long tenantId, String softwareName, String vendorName,
@@ -1161,8 +1256,175 @@ public class ContractService {
                 entitlement.getSeatsPurchased(),
                 entitlement.getPrice(),
                 entitlement.getStartDate(),
-                entitlement.getExpiryDate());
+                entitlement.getExpiryDate(),
+                entitlement.getSoftwareCode(),
+                entitlement.getVendorId(),
+                entitlement.getFunctionalGrouping(),
+                entitlement.getFunctionalOwner(),
+                entitlement.getConfidenceLevel(),
+                entitlement.getManufacturerName(),
+                entitlement.getSystemCategory(),
+                entitlement.getSystemCategorization(),
+                entitlement.getBusinessCriticality(),
+                entitlement.getSystemStrategy(),
+                entitlement.getErpSystem(),
+                entitlement.getAnnualInfrastructureCost(),
+                entitlement.getAnnualCostNonLicense(),
+                entitlement.getAnnualLicenseCost(),
+                entitlement.getAnnualCostTotal(),
+                entitlement.getAcsBudget(),
+                entitlement.getNumberOfActiveUsers(),
+                entitlement.getNumberOfLicensesOwned(),
+                entitlement.getProposedFunctionGroupOwner(),
+                entitlement.getBillingVendor(),
+                entitlement.getBillingVendorId(),
+                entitlement.getBusinessFunction(),
+                entitlement.getNumberOfUsers(),
+                entitlement.getBudgetOwner(),
+                entitlement.getPrimaryItGroup(),
+                entitlement.getPrimaryItGroupLeadership(),
+                entitlement.getContractDuration(),
+                entitlement.getPaymentSchedule(),
+                entitlement.getCurrency(),
+                entitlement.getCriticalityLevels(),
+                entitlement.getDescription());
     }
+
+    // Applies the ~30 descriptive/budget columns shared by every create/update
+    // license request onto the entity; vendorId is set separately by each call
+    // site since its source differs (path param vs. contract.getVendorId()).
+    private void applyExtendedFields(Entitlement entitlement, CreateContractLicenseRequest request) {
+        entitlement.setFunctionalGrouping(blankToNull(request.functionalGrouping()));
+        entitlement.setFunctionalOwner(blankToNull(request.functionalOwner()));
+        entitlement.setConfidenceLevel(blankToNull(request.confidenceLevel()));
+        entitlement.setManufacturerName(blankToNull(request.manufacturerName()));
+        entitlement.setSystemCategory(blankToNull(request.systemCategory()));
+        entitlement.setSystemCategorization(blankToNull(request.systemCategorization()));
+        entitlement.setBusinessCriticality(blankToNull(request.businessCriticality()));
+        entitlement.setSystemStrategy(blankToNull(request.systemStrategy()));
+        entitlement.setErpSystem(blankToNull(request.erpSystem()));
+        entitlement.setAnnualInfrastructureCost(request.annualInfrastructureCost());
+        entitlement.setAnnualCostNonLicense(request.annualCostNonLicense());
+        entitlement.setAnnualLicenseCost(request.annualLicenseCost());
+        entitlement.setAnnualCostTotal(request.annualCostTotal());
+        entitlement.setAcsBudget(request.acsBudget());
+        entitlement.setNumberOfActiveUsers(request.numberOfActiveUsers());
+        entitlement.setNumberOfLicensesOwned(request.numberOfLicensesOwned());
+        entitlement.setProposedFunctionGroupOwner(blankToNull(request.proposedFunctionGroupOwner()));
+        entitlement.setBillingVendor(blankToNull(request.billingVendor()));
+        entitlement.setBillingVendorId(request.billingVendorId());
+        entitlement.setBusinessFunction(blankToNull(request.businessFunction()));
+        entitlement.setNumberOfUsers(request.numberOfUsers());
+        entitlement.setBudgetOwner(blankToNull(request.budgetOwner()));
+        entitlement.setPrimaryItGroup(blankToNull(request.primaryItGroup()));
+        entitlement.setPrimaryItGroupLeadership(blankToNull(request.primaryItGroupLeadership()));
+        entitlement.setContractDuration(blankToNull(request.contractDuration()));
+        entitlement.setPaymentSchedule(blankToNull(request.paymentSchedule()));
+        entitlement.setCurrency(blankToNull(request.currency()));
+        entitlement.setCriticalityLevels(blankToNull(request.criticalityLevels()));
+        entitlement.setDescription(blankToNull(request.description()));
+    }
+
+    private void applyExtendedFields(Entitlement entitlement, UpdateContractLicenseRequest request) {
+        entitlement.setFunctionalGrouping(blankToNull(request.functionalGrouping()));
+        entitlement.setFunctionalOwner(blankToNull(request.functionalOwner()));
+        entitlement.setConfidenceLevel(blankToNull(request.confidenceLevel()));
+        entitlement.setManufacturerName(blankToNull(request.manufacturerName()));
+        entitlement.setSystemCategory(blankToNull(request.systemCategory()));
+        entitlement.setSystemCategorization(blankToNull(request.systemCategorization()));
+        entitlement.setBusinessCriticality(blankToNull(request.businessCriticality()));
+        entitlement.setSystemStrategy(blankToNull(request.systemStrategy()));
+        entitlement.setErpSystem(blankToNull(request.erpSystem()));
+        entitlement.setAnnualInfrastructureCost(request.annualInfrastructureCost());
+        entitlement.setAnnualCostNonLicense(request.annualCostNonLicense());
+        entitlement.setAnnualLicenseCost(request.annualLicenseCost());
+        entitlement.setAnnualCostTotal(request.annualCostTotal());
+        entitlement.setAcsBudget(request.acsBudget());
+        entitlement.setNumberOfActiveUsers(request.numberOfActiveUsers());
+        entitlement.setNumberOfLicensesOwned(request.numberOfLicensesOwned());
+        entitlement.setProposedFunctionGroupOwner(blankToNull(request.proposedFunctionGroupOwner()));
+        entitlement.setBillingVendor(blankToNull(request.billingVendor()));
+        entitlement.setBillingVendorId(request.billingVendorId());
+        entitlement.setBusinessFunction(blankToNull(request.businessFunction()));
+        entitlement.setNumberOfUsers(request.numberOfUsers());
+        entitlement.setBudgetOwner(blankToNull(request.budgetOwner()));
+        entitlement.setPrimaryItGroup(blankToNull(request.primaryItGroup()));
+        entitlement.setPrimaryItGroupLeadership(blankToNull(request.primaryItGroupLeadership()));
+        entitlement.setContractDuration(blankToNull(request.contractDuration()));
+        entitlement.setPaymentSchedule(blankToNull(request.paymentSchedule()));
+        entitlement.setCurrency(blankToNull(request.currency()));
+        entitlement.setCriticalityLevels(blankToNull(request.criticalityLevels()));
+        entitlement.setDescription(blankToNull(request.description()));
+    }
+
+    private String blankToNull(String value) {
+        return value == null || value.isBlank() ? null : value.strip();
+    }
+
+    private static Object[] concatArrays(Object[] first, Object[] second) {
+        Object[] combined = new Object[first.length + second.length];
+        System.arraycopy(first, 0, combined, 0, first.length);
+        System.arraycopy(second, 0, combined, first.length, second.length);
+        return combined;
+    }
+
+    // Same ~30 columns as applyExtendedFields, in the same order as the trailing
+    // columns of LICENSE_SELECT_SQL, for the raw-SQL admin INSERT/UPDATE paths.
+    private Object[] extendedFieldValues(CreateContractLicenseRequest request) {
+        return new Object[] {
+                blankToNull(request.softwareCode()), blankToNull(request.functionalGrouping()),
+                blankToNull(request.functionalOwner()), blankToNull(request.confidenceLevel()),
+                blankToNull(request.manufacturerName()), blankToNull(request.systemCategory()),
+                blankToNull(request.systemCategorization()), blankToNull(request.businessCriticality()),
+                blankToNull(request.systemStrategy()), blankToNull(request.erpSystem()),
+                request.annualInfrastructureCost(), request.annualCostNonLicense(), request.annualLicenseCost(),
+                request.annualCostTotal(), request.acsBudget(), request.numberOfActiveUsers(),
+                request.numberOfLicensesOwned(), blankToNull(request.proposedFunctionGroupOwner()),
+                blankToNull(request.billingVendor()), request.billingVendorId(),
+                blankToNull(request.businessFunction()), request.numberOfUsers(), blankToNull(request.budgetOwner()),
+                blankToNull(request.primaryItGroup()), blankToNull(request.primaryItGroupLeadership()),
+                blankToNull(request.contractDuration()), blankToNull(request.paymentSchedule()),
+                blankToNull(request.currency()), blankToNull(request.criticalityLevels()),
+                blankToNull(request.description()) };
+    }
+
+    private Object[] extendedFieldValues(UpdateContractLicenseRequest request) {
+        return new Object[] {
+                blankToNull(request.softwareCode()), blankToNull(request.functionalGrouping()),
+                blankToNull(request.functionalOwner()), blankToNull(request.confidenceLevel()),
+                blankToNull(request.manufacturerName()), blankToNull(request.systemCategory()),
+                blankToNull(request.systemCategorization()), blankToNull(request.businessCriticality()),
+                blankToNull(request.systemStrategy()), blankToNull(request.erpSystem()),
+                request.annualInfrastructureCost(), request.annualCostNonLicense(), request.annualLicenseCost(),
+                request.annualCostTotal(), request.acsBudget(), request.numberOfActiveUsers(),
+                request.numberOfLicensesOwned(), blankToNull(request.proposedFunctionGroupOwner()),
+                blankToNull(request.billingVendor()), request.billingVendorId(),
+                blankToNull(request.businessFunction()), request.numberOfUsers(), blankToNull(request.budgetOwner()),
+                blankToNull(request.primaryItGroup()), blankToNull(request.primaryItGroupLeadership()),
+                blankToNull(request.contractDuration()), blankToNull(request.paymentSchedule()),
+                blankToNull(request.currency()), blankToNull(request.criticalityLevels()),
+                blankToNull(request.description()) };
+    }
+
+    private static final String EXTENDED_LICENSE_INSERT_COLUMNS = """
+            software_code, functional_grouping, functional_owner, confidence_level, manufacturer_name,
+            system_category, system_categorization, business_criticality, system_strategy, erp_system,
+            annual_infrastructure_cost, annual_cost_non_license, annual_license_cost, annual_cost_total, acs_budget,
+            number_of_active_users, number_of_licenses_owned, proposed_function_group_owner, billing_vendor,
+            billing_vendor_id, business_function, number_of_users, budget_owner, primary_it_group,
+            primary_it_group_leadership, contract_duration, payment_schedule, currency, criticality_levels, description
+            """;
+
+    private static final String EXTENDED_LICENSE_INSERT_PLACEHOLDERS = "?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?";
+
+    private static final String EXTENDED_LICENSE_UPDATE_ASSIGNMENTS = """
+            software_code = ?, functional_grouping = ?, functional_owner = ?, confidence_level = ?, manufacturer_name = ?,
+            system_category = ?, system_categorization = ?, business_criticality = ?, system_strategy = ?, erp_system = ?,
+            annual_infrastructure_cost = ?, annual_cost_non_license = ?, annual_license_cost = ?, annual_cost_total = ?, acs_budget = ?,
+            number_of_active_users = ?, number_of_licenses_owned = ?, proposed_function_group_owner = ?, billing_vendor = ?,
+            billing_vendor_id = ?, business_function = ?, number_of_users = ?, budget_owner = ?, primary_it_group = ?,
+            primary_it_group_leadership = ?, contract_duration = ?, payment_schedule = ?, currency = ?, criticality_levels = ?, description = ?
+            """;
 
     private <T> T runInTenant(Long tenantId, Supplier<T> action) {
         Long previousTenant = TenantContext.get();

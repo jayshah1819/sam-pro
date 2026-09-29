@@ -1,8 +1,11 @@
-.contracts-preview {
+/* Defined on :root (not just .contracts-preview) so portaled modals -
+   rendered outside the page wrapper - can still resolve these vars. */
+:root {
   --contracts-bg: #f7f6f2;
   --contracts-ink: #232323;
   --contracts-soft: #5b5b57;
   --contracts-line: #d8d5cc;
+  --contracts-line-strong: #a8a49a;
   --contracts-accent: #2b5a63;
   --contracts-accent-dark: #1e4048;
   --contracts-amber: #8a5a16;
@@ -11,6 +14,8 @@
   --contracts-red-bg: #fbebe9;
   --contracts-green: #2e6a46;
   --contracts-green-bg: #eaf3ec;
+}
+.contracts-preview {
   color: var(--contracts-ink);
   background: var(--contracts-bg);
   padding: 30px;
@@ -38,6 +43,12 @@
 .dashboard-license-readonly-field { display: flex; flex-direction: column; gap: 3px; }
 .dashboard-license-readonly-field span { font-size: 10.5px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; color: var(--contracts-soft); }
 .dashboard-license-actions { grid-column: 1 / -1; display: flex; justify-content: flex-end; gap: 8px; }
+.license-extended-fields { grid-column: 1 / -1; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; margin: 0; padding: 14px 12px 4px; border: 1px solid var(--contracts-line); border-radius: 8px; }
+.license-extended-fields legend { grid-column: 1 / -1; padding: 0 6px; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; color: var(--contracts-soft); }
+.license-extended-fields input,
+.license-extended-fields textarea { height: 36px; min-width: 0; border: 1px solid #b9b6ac; border-radius: 6px; padding: 0 10px; background: #fff; font-size: 13px; }
+.license-extended-fields .license-extended-description { grid-column: 1 / -1; height: auto; padding: 9px 10px; }
+.license-description-cell { max-width: 220px; white-space: normal; }
 .contracts-comments-field { box-sizing: border-box; width: 100%; min-height: 72px; grid-column: 1 / -1; resize: vertical; border: 1px solid #b9b6ac; border-radius: 6px; background: #fff; color: var(--contracts-ink); font-size: 13px; outline: none; padding: 9px 10px; }
 .contracts-comments-field:focus { border-color: var(--contracts-accent); box-shadow: 0 0 0 3px rgba(43, 90, 99, 0.12); }
 .dashboard-alert-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
@@ -97,6 +108,46 @@
 .dashboard-seat-detail-head { background: #faf9f6; color: var(--contracts-soft); font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; }
 .dashboard-seat-detail-row.is-expired { color: var(--contracts-red); }
 .dashboard-seat-detail-total { background: #faf9f6; font-weight: 700; }
+
+.dashboard-calendar-panel { padding: 18px; border-radius: 12px; box-shadow: 0 1px 2px rgba(8, 6, 13, .04); }
+.dashboard-calendar-legend { display: flex; flex-wrap: wrap; gap: 16px; margin-top: 10px; font-size: 12px; color: var(--contracts-soft); }
+.dashboard-calendar-legend span { display: inline-flex; align-items: center; gap: 6px; }
+.dashboard-calendar-legend i { display: inline-block; width: 10px; height: 10px; border-radius: 3px; }
+.dashboard-calendar-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; margin-top: 14px; }
+.dashboard-calendar-box { display: flex; flex-direction: column; border: 1px solid var(--contracts-line); border-radius: 10px; padding: 14px; background: #fff; min-height: 104px; box-shadow: 0 1px 2px rgba(8, 6, 13, .03); transition: box-shadow .12s ease, transform .12s ease; }
+.dashboard-calendar-box:hover { box-shadow: 0 6px 16px rgba(8, 6, 13, .08); transform: translateY(-1px); }
+.dashboard-calendar-month { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; padding-bottom: 8px; border-bottom: 1px solid var(--contracts-line); }
+.dashboard-calendar-month span { font-size: 13px; font-weight: 700; color: var(--contracts-ink); }
+.dashboard-calendar-month strong { color: var(--contracts-accent-dark); font-size: 12px; white-space: nowrap; }
+.dashboard-calendar-chips { display: flex; flex-direction: column; gap: 6px; margin-top: 10px; }
+.dashboard-calendar-chip {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  width: 100%;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  padding: 6px 10px;
+  font-size: 12px;
+  font-weight: 600;
+  text-align: left;
+  cursor: default;
+  transition: filter .1s ease;
+}
+.dashboard-calendar-chip:hover { filter: brightness(0.96); }
+.dashboard-calendar-chip-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.dashboard-calendar-chip-price { flex-shrink: 0; font-weight: 700; }
+.dashboard-calendar-chip-green { background: #e6f6ea; border-color: #2f9e44; color: #1b5e20; }
+.dashboard-calendar-chip-yellow { background: #fef3d6; border-color: #e8a90c; color: #7a5300; }
+.dashboard-calendar-chip-red { background: #fbe4e4; border-color: #c92a2a; color: #7a1414; }
+.dashboard-calendar-chip-neutral { background: #f2f1ed; border-color: #b8b5ac; color: #5b5b57; }
+.dashboard-calendar-legend .dashboard-calendar-chip-green { background: #2f9e44; }
+.dashboard-calendar-legend .dashboard-calendar-chip-yellow { background: #e8a90c; }
+.dashboard-calendar-legend .dashboard-calendar-chip-red { background: #c92a2a; }
+@media (max-width: 1100px) { .dashboard-calendar-grid { grid-template-columns: repeat(3, 1fr); } }
+@media (max-width: 800px) { .dashboard-calendar-grid { grid-template-columns: repeat(2, 1fr); } }
+@media (max-width: 520px) { .dashboard-calendar-grid { grid-template-columns: 1fr; } }
 @media (max-width: 600px) { .dashboard-seat-detail { margin-left: 0; } .dashboard-seat-detail-row { grid-template-columns: 70px minmax(0, 1.5fr) 50px 100px; } }
 @media (max-width: 900px) { .dashboard-alert-grid { grid-template-columns: 1fr; } }
 @media (max-width: 800px) { .dashboard-metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); } .dashboard-summary-head, .dashboard-summary-row { grid-template-columns: 1.5fr 1fr 1fr 1.25fr; } }
@@ -170,6 +221,8 @@
   font-size: 13px;
   line-height: 1;
   padding: 0 12px;
+  white-space: nowrap;
+  flex-shrink: 0;
 }
 .contracts-search-button {
   border: 1px solid var(--contracts-accent);
@@ -228,6 +281,7 @@
   box-shadow: 0 20px 60px rgba(20, 18, 15, 0.22);
   font-family: var(--sans, system-ui, 'Segoe UI', Roboto, sans-serif);
 }
+.finance-modal { max-width: 780px; }
 .contracts-modal-head {
   position: sticky;
   top: 0;
@@ -256,9 +310,9 @@
 .contracts-field-section + .contracts-field-section { padding-top: 6px; border-top: 1px solid var(--contracts-line); }
 .contracts-field-section-title {
   margin: 0 0 14px;
-  font-size: 11px;
+  font-size: 11.5px;
   font-weight: 700;
-  letter-spacing: 0.08em;
+  letter-spacing: 0.07em;
   text-transform: uppercase;
   color: var(--contracts-accent-dark);
 }
@@ -271,7 +325,16 @@
   .contracts-field-grid-4 { grid-template-columns: 1fr; }
 }
 .contracts-field { position: relative; display: flex; flex-direction: column; gap: 7px; }
-.contracts-field > span { font-size: 12.5px; font-weight: 600; color: var(--contracts-ink); }
+.contracts-field > span {
+  display: flex;
+  align-items: flex-end;
+  min-height: 32px;
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.3;
+  letter-spacing: 0.005em;
+  color: var(--contracts-ink);
+}
 .contracts-field input,
 .contracts-field select,
 .contracts-field textarea {
@@ -282,8 +345,9 @@
   background: #fff;
   color: var(--contracts-ink);
   font-family: inherit;
-  font-size: 13.5px;
+  font-size: 14px;
   font-weight: 500;
+  line-height: 1.2;
   outline: none;
   transition: border-color 0.15s ease, box-shadow 0.15s ease;
 }
@@ -296,8 +360,19 @@
   border-color: var(--contracts-accent);
   box-shadow: 0 0 0 3px rgba(43, 90, 99, 0.15);
 }
-.contracts-field select { cursor: pointer; }
-.contracts-field-hint { margin: 2px 0 0; font-size: 11.5px; color: var(--contracts-soft); }
+.contracts-field select {
+  cursor: pointer;
+  appearance: none;
+  -webkit-appearance: none;
+  padding-right: 34px;
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20' fill='none' stroke='%235b5b57' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'><path d='M5 7.5l5 5 5-5'/></svg>");
+  background-repeat: no-repeat;
+  background-position: right 11px center;
+  background-size: 14px;
+}
+.contracts-field select:invalid { color: #a9a498; }
+.contracts-field select option { color: var(--contracts-ink); background: #fff; font-weight: 500; }
+.contracts-field-hint { margin: 2px 0 0; font-size: 12px; line-height: 1.4; color: var(--contracts-soft); }
 .contracts-field-readonly { background: #f1f0eb; color: var(--contracts-soft); cursor: not-allowed; }
 .contracts-field-subcard {
   margin-top: 14px;
@@ -541,12 +616,14 @@
   text-align: left;
   padding: 10px 12px;
   border-bottom: 2px solid var(--contracts-line);
+  border-right: 1px solid var(--contracts-line-strong);
   color: var(--contracts-soft);
   font-size: 13px;
   font-weight: 700;
   white-space: nowrap;
 }
-.contracts-table td { padding: 14px 12px; border-bottom: 1px solid var(--contracts-line); vertical-align: middle; }
+.contracts-table td { padding: 14px 12px; border-bottom: 1px solid var(--contracts-line); border-right: 1px solid var(--contracts-line-strong); vertical-align: middle; }
+.contracts-table th:last-child, .contracts-table td:last-child { border-right: none; }
 .contracts-table tr.contract-row { transition: background-color 1.5s ease; }
 .contracts-table tr.contract-row td:last-child { transition: background-color 1.5s ease; }
 .contracts-table tr.contract-row:hover { background: #f2f0ea; }
@@ -587,6 +664,17 @@
 .contracts-preview .status-pill.status-active { background: var(--contracts-green-bg); color: var(--contracts-green); }
 .contracts-preview .status-pill.status-expired { background: var(--contracts-red-bg); color: var(--contracts-red); }
 .contracts-preview .status-pill.status-pending { background: var(--contracts-amber-bg); color: var(--contracts-amber); }
+.contracts-preview .status-pill.pill-positive { background: var(--contracts-green-bg); color: var(--contracts-green); }
+.contracts-preview .status-pill.pill-caution { background: var(--contracts-amber-bg); color: var(--contracts-amber); }
+.contracts-preview .status-pill.pill-negative { background: var(--contracts-red-bg); color: var(--contracts-red); }
+.contracts-preview .status-pill.pill-neutral { background: #eef0f6; color: var(--contracts-accent-dark); }
+
+.finance-kpi-legend { display: flex; flex-wrap: wrap; gap: 8px 20px; align-items: center; }
+.finance-kpi-legend-group { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.finance-kpi-legend-group small { font-size: 11px; font-weight: 700; color: var(--contracts-soft); text-transform: uppercase; letter-spacing: .05em; margin-right: 2px; }
+.finance-category-summary { display: flex; align-items: center; gap: 16px; }
+.finance-category-summary span { font-size: 12px; color: var(--contracts-soft); }
+.finance-category-summary strong { color: #08060d; }
 
 .contracts-preview .license-toggle,
 .contracts-preview .contract-edit-button {
@@ -694,6 +782,9 @@
 }
 .license-modal-delete { height: 32px; border: 1px solid #e3aaa5; border-radius: 6px; background: var(--contracts-red-bg); color: var(--contracts-red); cursor: pointer; font-size: 13px; padding: 0 12px; }
 .license-row-actions { display: flex; align-items: center; gap: 6px; }
+.finance-row-actions,
+.finance-actions-col { min-width: 150px; }
+.finance-row-actions { display: flex; align-items: center; gap: 6px; white-space: nowrap; }
 .license-renew-button { height: 32px; border: 1px solid var(--contracts-accent); border-radius: 6px; background: #e9f0ef; color: var(--contracts-accent-dark); cursor: pointer; font-size: 12px; padding: 0 10px; }
 .license-renew-button:hover { background: #d7e8e7; }
 .license-renew-button:disabled { cursor: wait; opacity: 0.55; }

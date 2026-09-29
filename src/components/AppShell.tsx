@@ -6,6 +6,7 @@ interface NavItem {
   label: string
   path: string
   roles: string[]
+  end?: boolean
 }
 
 const NAV_ITEMS: NavItem[] = [
@@ -15,6 +16,13 @@ const NAV_ITEMS: NavItem[] = [
   { label: 'Licenses',     path: '/licenses',     roles: ['VIEWER', 'EDITOR', 'ADMIN'] },
   { label: 'Departments',  path: '/departments',  roles: ['VIEWER', 'EDITOR', 'ADMIN'] },
   { label: 'Users',        path: '/users',        roles: ['ADMIN'] },
+]
+
+const FINANCE_NAV_ITEMS: NavItem[] = [
+  { label: 'Summary',     path: '/finance',              roles: ['VIEWER', 'EDITOR', 'ADMIN'], end: true },
+  { label: 'Detailed',    path: '/finance/detailed',     roles: ['VIEWER', 'EDITOR', 'ADMIN'] },
+  { label: 'All Months',  path: '/finance/all-months',   roles: ['VIEWER', 'EDITOR', 'ADMIN'] },
+  { label: 'Inventory',   path: '/finance/inventory',    roles: ['VIEWER', 'EDITOR', 'ADMIN'] },
 ]
 
 type WorkspaceView = 'procurement' | 'finance'
@@ -36,7 +44,7 @@ export default function AppShell() {
     navigate(next === 'finance' ? '/finance' : '/contracts')
   }
 
-  const visibleItems = view === 'finance' ? [] : NAV_ITEMS.filter(item => item.roles.includes(role))
+  const visibleItems = view === 'finance' ? FINANCE_NAV_ITEMS : NAV_ITEMS.filter(item => item.roles.includes(role))
 
   return (
     <div className="min-h-screen flex bg-[#f7f6f3]">
@@ -61,6 +69,7 @@ export default function AppShell() {
             <NavLink
               key={item.label}
               to={item.path}
+              end={item.end}
               className={({ isActive }) =>
                 'block px-4 py-2 text-sm transition-colors ' +
                 (isActive

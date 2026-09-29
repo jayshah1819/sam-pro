@@ -30,11 +30,47 @@ type LicenseForm = {
   price: string
   startDate: string
   expiryDate: string
+  softwareCode: string
+  functionalGrouping: string
+  functionalOwner: string
+  confidenceLevel: string
+  manufacturerName: string
+  systemCategory: string
+  systemCategorization: string
+  businessCriticality: string
+  systemStrategy: string
+  erpSystem: string
+  annualInfrastructureCost: string
+  annualCostNonLicense: string
+  annualLicenseCost: string
+  annualCostTotal: string
+  acsBudget: string
+  numberOfActiveUsers: string
+  numberOfLicensesOwned: string
+  proposedFunctionGroupOwner: string
+  billingVendor: string
+  billingVendorId: string
+  businessFunction: string
+  numberOfUsers: string
+  budgetOwner: string
+  primaryItGroup: string
+  primaryItGroupLeadership: string
+  contractDuration: string
+  paymentSchedule: string
+  currency: string
+  criticalityLevels: string
+  description: string
 }
 
 const EMPTY_FORM: LicenseForm = {
   vendorId: '', contractId: '', location: '', licenseName: '', itOwner: '', businessOwner: '', comments: '', softwareName: '', version: '',
   licenseType: 'PER_SEAT', status: 'ACTIVE', paymentMethod: 'PURCHASE_ORDER', seatsPurchased: '', price: '', startDate: '', expiryDate: '',
+  softwareCode: '', functionalGrouping: '', functionalOwner: '', confidenceLevel: '', manufacturerName: '', systemCategory: '',
+  systemCategorization: '', businessCriticality: '', systemStrategy: '', erpSystem: '', annualInfrastructureCost: '',
+  annualCostNonLicense: '', annualLicenseCost: '', annualCostTotal: '', acsBudget: '', numberOfActiveUsers: '',
+  numberOfLicensesOwned: '', proposedFunctionGroupOwner: '', billingVendor: '', billingVendorId: '', businessFunction: '',
+  numberOfUsers: '', budgetOwner: '', primaryItGroup: '', primaryItGroupLeadership: '', contractDuration: '',
+  paymentSchedule: '', currency: '', criticalityLevels: '', description: '',
 }
 
 export default function LicensesPage() {
@@ -123,9 +159,11 @@ export default function LicensesPage() {
     downloadExcel('licenses.xlsx', 'Licenses', visibleLicenses.map(license => ({
       'License name': license.licenseName,
       Vendor: license.vendorName,
+      'Vendor ID': license.vendorId ?? '',
       'IT owner': license.itOwner ?? '',
       'Business owner': license.businessOwner ?? '',
       'Software name': license.softwareName,
+      'Software code': license.softwareCode ?? '',
       'Contract ID': license.contractId ?? '',
       Department: license.location ?? '',
       Type: license.licenseType,
@@ -135,6 +173,35 @@ export default function LicensesPage() {
       Price: license.price ?? '',
       Start: license.startDate,
       Expiry: license.expiryDate,
+      'Functional grouping': license.functionalGrouping ?? '',
+      'Functional owner': license.functionalOwner ?? '',
+      'Confidence level': license.confidenceLevel ?? '',
+      'Manufacturer name': license.manufacturerName ?? '',
+      'System category': license.systemCategory ?? '',
+      'System categorization': license.systemCategorization ?? '',
+      'Business criticality': license.businessCriticality ?? '',
+      'System strategy': license.systemStrategy ?? '',
+      'ERP system': license.erpSystem ?? '',
+      'Annual infrastructure cost': license.annualInfrastructureCost ?? '',
+      'Annual cost (non-license)': license.annualCostNonLicense ?? '',
+      'Annual license cost': license.annualLicenseCost ?? '',
+      'Annual cost - total': license.annualCostTotal ?? '',
+      'ACS budget': license.acsBudget ?? '',
+      'Number of active users': license.numberOfActiveUsers ?? '',
+      'Number of licenses owned': license.numberOfLicensesOwned ?? '',
+      'Proposed function group/dept owner': license.proposedFunctionGroupOwner ?? '',
+      'Billing vendor': license.billingVendor ?? '',
+      'Billing vendor ID': license.billingVendorId ?? '',
+      'Business function': license.businessFunction ?? '',
+      'Number of users': license.numberOfUsers ?? '',
+      'Budget owner': license.budgetOwner ?? '',
+      'Primary IT group': license.primaryItGroup ?? '',
+      'Primary IT group leadership': license.primaryItGroupLeadership ?? '',
+      'Contract duration': license.contractDuration ?? '',
+      'Payment schedule': license.paymentSchedule ?? '',
+      Currency: license.currency ?? '',
+      'Criticality levels': license.criticalityLevels ?? '',
+      Description: license.description ?? '',
     })))
   }
 
@@ -171,6 +238,36 @@ export default function LicensesPage() {
         expiryDate: form.expiryDate || null,
         contractId: form.contractId ? Number(form.contractId) : null,
         location: form.contractId ? null : (form.location.trim() || null),
+        softwareCode: form.softwareCode.trim() || null,
+        functionalGrouping: form.functionalGrouping.trim() || null,
+        functionalOwner: form.functionalOwner.trim() || null,
+        confidenceLevel: form.confidenceLevel.trim() || null,
+        manufacturerName: form.manufacturerName.trim() || null,
+        systemCategory: form.systemCategory.trim() || null,
+        systemCategorization: form.systemCategorization.trim() || null,
+        businessCriticality: form.businessCriticality.trim() || null,
+        systemStrategy: form.systemStrategy.trim() || null,
+        erpSystem: form.erpSystem.trim() || null,
+        annualInfrastructureCost: form.annualInfrastructureCost.trim() ? Number(form.annualInfrastructureCost) : null,
+        annualCostNonLicense: form.annualCostNonLicense.trim() ? Number(form.annualCostNonLicense) : null,
+        annualLicenseCost: form.annualLicenseCost.trim() ? Number(form.annualLicenseCost) : null,
+        annualCostTotal: form.annualCostTotal.trim() ? Number(form.annualCostTotal) : null,
+        acsBudget: form.acsBudget.trim() ? Number(form.acsBudget) : null,
+        numberOfActiveUsers: form.numberOfActiveUsers.trim() ? Number(form.numberOfActiveUsers) : null,
+        numberOfLicensesOwned: form.numberOfLicensesOwned.trim() ? Number(form.numberOfLicensesOwned) : null,
+        proposedFunctionGroupOwner: form.proposedFunctionGroupOwner.trim() || null,
+        billingVendor: form.billingVendor.trim() || null,
+        billingVendorId: form.billingVendorId.trim() ? Number(form.billingVendorId) : null,
+        businessFunction: form.businessFunction.trim() || null,
+        numberOfUsers: form.numberOfUsers.trim() ? Number(form.numberOfUsers) : null,
+        budgetOwner: form.budgetOwner.trim() || null,
+        primaryItGroup: form.primaryItGroup.trim() || null,
+        primaryItGroupLeadership: form.primaryItGroupLeadership.trim() || null,
+        contractDuration: form.contractDuration.trim() || null,
+        paymentSchedule: form.paymentSchedule.trim() || null,
+        currency: form.currency.trim() || null,
+        criticalityLevels: form.criticalityLevels.trim() || null,
+        description: form.description.trim() || null,
       }
       const { data } = editingLicenseId == null
         ? await client.post<ContractLicense>(`/vendors/${form.vendorId}/licenses`, payload)
@@ -231,6 +328,36 @@ export default function LicensesPage() {
       price: license.price == null ? '' : String(license.price),
       startDate: license.startDate,
       expiryDate: license.expiryDate,
+      softwareCode: license.softwareCode ?? '',
+      functionalGrouping: license.functionalGrouping ?? '',
+      functionalOwner: license.functionalOwner ?? '',
+      confidenceLevel: license.confidenceLevel ?? '',
+      manufacturerName: license.manufacturerName ?? '',
+      systemCategory: license.systemCategory ?? '',
+      systemCategorization: license.systemCategorization ?? '',
+      businessCriticality: license.businessCriticality ?? '',
+      systemStrategy: license.systemStrategy ?? '',
+      erpSystem: license.erpSystem ?? '',
+      annualInfrastructureCost: license.annualInfrastructureCost == null ? '' : String(license.annualInfrastructureCost),
+      annualCostNonLicense: license.annualCostNonLicense == null ? '' : String(license.annualCostNonLicense),
+      annualLicenseCost: license.annualLicenseCost == null ? '' : String(license.annualLicenseCost),
+      annualCostTotal: license.annualCostTotal == null ? '' : String(license.annualCostTotal),
+      acsBudget: license.acsBudget == null ? '' : String(license.acsBudget),
+      numberOfActiveUsers: license.numberOfActiveUsers == null ? '' : String(license.numberOfActiveUsers),
+      numberOfLicensesOwned: license.numberOfLicensesOwned == null ? '' : String(license.numberOfLicensesOwned),
+      proposedFunctionGroupOwner: license.proposedFunctionGroupOwner ?? '',
+      billingVendor: license.billingVendor ?? '',
+      billingVendorId: license.billingVendorId == null ? '' : String(license.billingVendorId),
+      businessFunction: license.businessFunction ?? '',
+      numberOfUsers: license.numberOfUsers == null ? '' : String(license.numberOfUsers),
+      budgetOwner: license.budgetOwner ?? '',
+      primaryItGroup: license.primaryItGroup ?? '',
+      primaryItGroupLeadership: license.primaryItGroupLeadership ?? '',
+      contractDuration: license.contractDuration ?? '',
+      paymentSchedule: license.paymentSchedule ?? '',
+      currency: license.currency ?? '',
+      criticalityLevels: license.criticalityLevels ?? '',
+      description: license.description ?? '',
     })
     setAddOpen(true)
   }
@@ -346,6 +473,39 @@ export default function LicensesPage() {
                 <input type="date" required value={form.startDate} onChange={event => setForm(previous => ({ ...previous, startDate: event.target.value }))} onFocus={event => event.currentTarget.showPicker?.()} />
                 <input type="date" required value={form.expiryDate} onChange={event => setForm(previous => ({ ...previous, expiryDate: event.target.value }))} onFocus={event => event.currentTarget.showPicker?.()} />
                 <textarea placeholder="Comments" rows={3} value={form.comments} onChange={event => setForm(previous => ({ ...previous, comments: event.target.value }))} className="contracts-comments-field" />
+                <fieldset className="license-extended-fields">
+                  <legend>Additional details</legend>
+                  <input placeholder="Software code (auto-set from Software ID after save)" value={form.softwareCode} disabled title="Automatically set to the software's ID so it always links to Finance; not editable." />
+                  <input placeholder="Functional grouping" value={form.functionalGrouping} onChange={event => setForm(previous => ({ ...previous, functionalGrouping: event.target.value }))} />
+                  <input placeholder="Functional owner" value={form.functionalOwner} onChange={event => setForm(previous => ({ ...previous, functionalOwner: event.target.value }))} />
+                  <input placeholder="Confidence level" value={form.confidenceLevel} onChange={event => setForm(previous => ({ ...previous, confidenceLevel: event.target.value }))} />
+                  <input placeholder="Manufacturer name" value={form.manufacturerName} onChange={event => setForm(previous => ({ ...previous, manufacturerName: event.target.value }))} />
+                  <input placeholder="System category" value={form.systemCategory} onChange={event => setForm(previous => ({ ...previous, systemCategory: event.target.value }))} />
+                  <input placeholder="System categorization" value={form.systemCategorization} onChange={event => setForm(previous => ({ ...previous, systemCategorization: event.target.value }))} />
+                  <input placeholder="Business criticality" value={form.businessCriticality} onChange={event => setForm(previous => ({ ...previous, businessCriticality: event.target.value }))} />
+                  <input placeholder="System strategy" value={form.systemStrategy} onChange={event => setForm(previous => ({ ...previous, systemStrategy: event.target.value }))} />
+                  <input placeholder="ERP system" value={form.erpSystem} onChange={event => setForm(previous => ({ ...previous, erpSystem: event.target.value }))} />
+                  <input type="number" min="0" step="0.01" placeholder="Annual infrastructure cost" value={form.annualInfrastructureCost} onChange={event => setForm(previous => ({ ...previous, annualInfrastructureCost: event.target.value }))} />
+                  <input type="number" min="0" step="0.01" placeholder="Annual cost (non-license)" value={form.annualCostNonLicense} onChange={event => setForm(previous => ({ ...previous, annualCostNonLicense: event.target.value }))} />
+                  <input type="number" min="0" step="0.01" placeholder="Annual license cost" value={form.annualLicenseCost} onChange={event => setForm(previous => ({ ...previous, annualLicenseCost: event.target.value }))} />
+                  <input type="number" min="0" step="0.01" placeholder="Annual cost - total" value={form.annualCostTotal} onChange={event => setForm(previous => ({ ...previous, annualCostTotal: event.target.value }))} />
+                  <input type="number" min="0" step="0.01" placeholder="ACS budget" value={form.acsBudget} onChange={event => setForm(previous => ({ ...previous, acsBudget: event.target.value }))} />
+                  <input type="number" min="0" placeholder="Number of active users" value={form.numberOfActiveUsers} onChange={event => setForm(previous => ({ ...previous, numberOfActiveUsers: event.target.value }))} />
+                  <input type="number" min="0" placeholder="Number of licenses owned" value={form.numberOfLicensesOwned} onChange={event => setForm(previous => ({ ...previous, numberOfLicensesOwned: event.target.value }))} />
+                  <input placeholder="Proposed function group/dept owner" value={form.proposedFunctionGroupOwner} onChange={event => setForm(previous => ({ ...previous, proposedFunctionGroupOwner: event.target.value }))} />
+                  <input placeholder="Billing vendor" value={form.billingVendor} onChange={event => setForm(previous => ({ ...previous, billingVendor: event.target.value }))} />
+                  <input type="number" placeholder="Billing vendor ID" value={form.billingVendorId} onChange={event => setForm(previous => ({ ...previous, billingVendorId: event.target.value }))} />
+                  <input placeholder="Business function" value={form.businessFunction} onChange={event => setForm(previous => ({ ...previous, businessFunction: event.target.value }))} />
+                  <input type="number" min="0" placeholder="Number of users" value={form.numberOfUsers} onChange={event => setForm(previous => ({ ...previous, numberOfUsers: event.target.value }))} />
+                  <input placeholder="Budget owner" value={form.budgetOwner} onChange={event => setForm(previous => ({ ...previous, budgetOwner: event.target.value }))} />
+                  <input placeholder="Primary IT group" value={form.primaryItGroup} onChange={event => setForm(previous => ({ ...previous, primaryItGroup: event.target.value }))} />
+                  <input placeholder="Primary IT group leadership" value={form.primaryItGroupLeadership} onChange={event => setForm(previous => ({ ...previous, primaryItGroupLeadership: event.target.value }))} />
+                  <input placeholder="Contract duration" value={form.contractDuration} onChange={event => setForm(previous => ({ ...previous, contractDuration: event.target.value }))} />
+                  <input placeholder="Payment schedule" value={form.paymentSchedule} onChange={event => setForm(previous => ({ ...previous, paymentSchedule: event.target.value }))} />
+                  <input placeholder="Currency" value={form.currency} onChange={event => setForm(previous => ({ ...previous, currency: event.target.value }))} />
+                  <input placeholder="Criticality levels" value={form.criticalityLevels} onChange={event => setForm(previous => ({ ...previous, criticalityLevels: event.target.value }))} />
+                  <textarea placeholder="Description" rows={2} value={form.description} onChange={event => setForm(previous => ({ ...previous, description: event.target.value }))} className="contracts-comments-field license-extended-description" />
+                </fieldset>
                 <div className="dashboard-license-actions"><button type="button" className="contracts-clear-button" onClick={() => setAddOpen(false)}>Cancel</button>{editingLicenseId != null && <button type="button" className="license-modal-delete" onClick={() => void deleteLicense()} disabled={saving}>Delete</button>}<button type="submit" className="contracts-search-button" disabled={saving}>{saving ? 'Saving…' : 'Save license'}</button></div>
               </form>
             </div>
@@ -362,7 +522,9 @@ export default function LicensesPage() {
                   <th>IT owner</th>
                   <th>Business owner</th>
                   <th>Vendor</th>
+                  <th>Vendor ID</th>
                   <th>Software</th>
+                  <th>Software code</th>
                   <th>Contract ID</th>
                   <th>Department</th>
                   <th>Type</th>
@@ -371,6 +533,35 @@ export default function LicensesPage() {
                   <th>Payment</th>
                   <th>Start</th>
                   <th>Expiry</th>
+                  <th>Functional grouping</th>
+                  <th>Functional owner</th>
+                  <th>Confidence level</th>
+                  <th>Manufacturer name</th>
+                  <th>System category</th>
+                  <th>System categorization</th>
+                  <th>Business criticality</th>
+                  <th>System strategy</th>
+                  <th>ERP system</th>
+                  <th>Annual infra cost</th>
+                  <th>Annual cost (non-license)</th>
+                  <th>Annual license cost</th>
+                  <th>Annual cost - total</th>
+                  <th>ACS budget</th>
+                  <th>Active users</th>
+                  <th>Licenses owned</th>
+                  <th>Proposed function group/dept owner</th>
+                  <th>Billing vendor</th>
+                  <th>Billing vendor ID</th>
+                  <th>Business function</th>
+                  <th>Number of users</th>
+                  <th>Budget owner</th>
+                  <th>Primary IT group</th>
+                  <th>Primary IT group leadership</th>
+                  <th>Contract duration</th>
+                  <th>Payment schedule</th>
+                  <th>Currency</th>
+                  <th>Criticality levels</th>
+                  <th>Description</th>
                   <th>Actions</th>
                 </tr>
               </thead>
@@ -381,7 +572,9 @@ export default function LicensesPage() {
                     <td>{license.itOwner || '—'}</td>
                     <td>{license.businessOwner || '—'}</td>
                     <td>{license.vendorName || '—'}</td>
+                    <td className="font-mono text-xs">{license.vendorId ?? '—'}</td>
                     <td>{license.softwareName}</td>
+                    <td className="font-mono text-xs">{license.softwareCode || '—'}</td>
                     <td className="font-mono text-xs">{license.contractId ?? '—'}</td>
                     <td>
                       <DepartmentCell
@@ -404,15 +597,44 @@ export default function LicensesPage() {
                     <td><span className={license.paymentMethod === 'CREDIT_CARD' ? 'payment-badge payment-credit-card' : 'payment-badge'}>{license.paymentMethod === 'CREDIT_CARD' ? 'Credit card' : 'PO'}</span></td>
                     <td>{license.startDate || '—'}</td>
                     <td>{license.expiryDate || '—'}</td>
+                    <td>{license.functionalGrouping || '—'}</td>
+                    <td>{license.functionalOwner || '—'}</td>
+                    <td>{license.confidenceLevel || '—'}</td>
+                    <td>{license.manufacturerName || '—'}</td>
+                    <td>{license.systemCategory || '—'}</td>
+                    <td>{license.systemCategorization || '—'}</td>
+                    <td>{license.businessCriticality || '—'}</td>
+                    <td>{license.systemStrategy || '—'}</td>
+                    <td>{license.erpSystem || '—'}</td>
+                    <td>{fmtCurrency(license.annualInfrastructureCost)}</td>
+                    <td>{fmtCurrency(license.annualCostNonLicense)}</td>
+                    <td>{fmtCurrency(license.annualLicenseCost)}</td>
+                    <td>{fmtCurrency(license.annualCostTotal)}</td>
+                    <td>{fmtCurrency(license.acsBudget)}</td>
+                    <td>{license.numberOfActiveUsers ?? '—'}</td>
+                    <td>{license.numberOfLicensesOwned ?? '—'}</td>
+                    <td>{license.proposedFunctionGroupOwner || '—'}</td>
+                    <td>{license.billingVendor || '—'}</td>
+                    <td className="font-mono text-xs">{license.billingVendorId ?? '—'}</td>
+                    <td>{license.businessFunction || '—'}</td>
+                    <td>{license.numberOfUsers ?? '—'}</td>
+                    <td>{license.budgetOwner || '—'}</td>
+                    <td>{license.primaryItGroup || '—'}</td>
+                    <td>{license.primaryItGroupLeadership || '—'}</td>
+                    <td>{license.contractDuration || '—'}</td>
+                    <td>{license.paymentSchedule || '—'}</td>
+                    <td>{license.currency || '—'}</td>
+                    <td>{license.criticalityLevels || '—'}</td>
+                    <td className="license-description-cell">{license.description || '—'}</td>
                     <td><button type="button" className="license-edit-button" onClick={() => editLicense(license)}>Edit</button></td>
                   </tr>
                 ))}
                 {visibleLicenses.length === 0 && (
-                  <tr><td colSpan={12} className="py-10 text-center text-[#6b6375]">No licenses found.</td></tr>
+                  <tr><td colSpan={44} className="py-10 text-center text-[#6b6375]">No licenses found.</td></tr>
                 )}
               </tbody>
             </table> : <table className="contracts-table licenses-table">
-              <thead><tr><th>Software</th><th>Vendor</th><th>Licenses</th><th>License names</th><th>Contracts</th><th>Total value</th></tr></thead>
+              <thead><tr><th>Software</th><th>Software code</th><th>Vendor</th><th>Vendor ID</th><th>Licenses</th><th>License names</th><th>Contracts</th><th>Total value</th></tr></thead>
               <tbody>
                 {softwareGroups.map(group => {
                   const isOpen = expandedSoftware[group.key] ?? false
@@ -420,7 +642,9 @@ export default function LicensesPage() {
                     <Fragment key={group.key}>
                       <tr className={`contract-row software-parent-row ${isOpen ? 'software-parent-row-open' : ''}`} role="button" tabIndex={0} onClick={() => setExpandedSoftware(previous => ({ ...previous, [group.key]: !isOpen }))} onKeyDown={event => { if (event.key === 'Enter' || event.key === ' ') setExpandedSoftware(previous => ({ ...previous, [group.key]: !isOpen })) }}>
                         <td className="font-semibold">{isOpen ? '▾' : '▸'} {group.softwareName}</td>
+                        <td className="font-mono text-xs">{group.licenses[0]?.softwareCode || '—'}</td>
                         <td>{group.vendorName}</td>
+                        <td className="font-mono text-xs">{group.vendor?.vendorId ?? '—'}</td>
                         <td>{group.licenses.length}</td>
                         <td className="software-license-names">{group.licenses.map(license => license.licenseName).join(', ')}</td>
                         <td>{new Set(group.licenses.filter(license => license.contractId != null).map(license => license.contractId)).size}</td>
@@ -428,14 +652,14 @@ export default function LicensesPage() {
                       </tr>
                       {isOpen && (
                         <tr className="software-vendor-detail-row">
-                          <td colSpan={6}>
+                          <td colSpan={8}>
                             Vendor details: <strong>{group.vendorName}</strong> · JDE {group.vendor?.vendorJDENumber || '—'} · {group.vendor?.contactEmail || '—'} · {group.vendor?.address || '—'} · {group.vendor?.website || '—'}
                           </td>
                         </tr>
                       )}
                       {isOpen && group.licenses.map(license => (
                         <tr key={`${group.key}-${license.licenseId}`} className="software-license-detail-row">
-                          <td colSpan={6}>
+                          <td colSpan={8}>
                             <div className="software-license-detail-grid">
                               <strong>{license.licenseName}</strong>
                               <span>Contract: {license.contractId ?? 'Standalone'}</span>
@@ -450,7 +674,7 @@ export default function LicensesPage() {
                     </Fragment>
                   )
                 })}
-                {softwareGroups.length === 0 && <tr><td colSpan={6} className="py-10 text-center text-[#6b6375]">No software found.</td></tr>}
+                {softwareGroups.length === 0 && <tr><td colSpan={8} className="py-10 text-center text-[#6b6375]">No software found.</td></tr>}
               </tbody>
             </table>}
           </div>

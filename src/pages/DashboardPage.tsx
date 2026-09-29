@@ -2,6 +2,7 @@ import { Fragment, useEffect, useState } from 'react'
 import { client } from '../api'
 import type { Contract, ContractLicense, Vendor } from '../types'
 import '../styles/contracts.css'
+import { downloadExcel } from '../utils/exportExcel'
 
 interface SeatGroup {
   key: string
@@ -24,6 +25,15 @@ function expiryLabel(value: string) {
 
 function asArray<T>(value: unknown): T[] {
   return Array.isArray(value) ? value as T[] : []
+}
+
+type CostTier = 'green' | 'yellow' | 'red' | 'neutral'
+
+function costTier(price: number | null): CostTier {
+  if (price == null) return 'neutral'
+  if (price < 5000) return 'green'
+  if (price <= 20000) return 'yellow'
+  return 'red'
 }
 
 export default function DashboardPage() {
@@ -89,6 +99,33 @@ export default function DashboardPage() {
   const chartStep = Math.max(10, Math.ceil((largestSeatTotal / 4) / 10) * 10)
   const chartMax = Math.max(chartStep * 4, 10)
 
+  // Rolling 12-month forecast of upcoming license renewal costs, keyed by the
+  // calendar month each license's expiry date falls in.
+  const licensesByMonthKey = licenses.reduce((groups, license) => {
+    const parsed = new Date(`${license.expiryDate}T00:00:00`)
+    if (Number.isNaN(parsed.getTime())) return groups
+    const key = `${parsed.getFullYear()}-${parsed.getMonth()}`
+    const bucket = groups.get(key)
+    if (bucket) bucket.push(license)
+    else groups.set(key, [license])
+    return groups
+  }, new Map<string, ContractLicense[]>())
+
+  const now = new Date()
+  const forecastMonths = Array.from({ length: 12 }, (_, index) => {
+    const monthDate = new Date(now.getFullYear(), now.getMonth() + index, 1)
+    const key = `${monthDate.getFullYear()}-${monthDate.getMonth()}`
+    const monthLicenses = (licensesByMonthKey.get(key) ?? [])
+      .slice()
+      .sort((a, b) => (b.price ?? 0) - (a.price ?? 0))
+    return {
+      key,
+      label: monthDate.toLocaleDateString('en-US', { month: 'long', year: 'numeric' }),
+      licenses: monthLicenses,
+      total: monthLicenses.reduce((sum, license) => sum + (license.price ?? 0), 0),
+    }
+  })
+
   function toggleSeatGroup(key: string) {
     setExpandedSeatKey(previous => previous === key ? null : key)
   }
@@ -140,6 +177,21 @@ export default function DashboardPage() {
     } finally {
       setRenewingContractId(null)
     }
+  }
+
+  function exportUpcomingCosts() {
+    const rows = forecastMonths.flatMap(month =>
+      month.licenses.map(license => ({
+        Month: month.label,
+        'License Name': license.licenseName,
+        Vendor: license.vendorName,
+        Software: license.softwareName,
+        Price: license.price,
+        'Expiry Date': license.expiryDate,
+        Tier: costTier(license.price),
+      })))
+    if (rows.length === 0) return
+    downloadExcel('upcoming-license-costs.xlsx', 'Upcoming Costs', rows)
   }
 
   return (
@@ -219,6 +271,42 @@ export default function DashboardPage() {
             ))}
           </div>
         </>}
+      </section>
+
+      <section className="contracts-panel dashboard-calendar-panel">
+        <div className="dashboard-chart-head">
+          <div><h2>Upcoming license costs</h2><p>Renewal cost per license, by the month its current term expires — hover a license to see its cost.</p></div>
+          <button type="button" className="contracts-clear-button" onClick={exportUpcomingCosts}>Export Excel</button>
+        </div>
+        <div className="dashboard-calendar-legend">
+          <span><i className="dashboard-calendar-chip dashboard-calendar-chip-green" /> Below $5k</span>
+          <span><i className="dashboard-calendar-chip dashboard-calendar-chip-yellow" /> $5k – $20k</span>
+          <span><i className="dashboard-calendar-chip dashboard-calendar-chip-red" /> Above $20k</span>
+        </div>
+        <div className="dashboard-calendar-grid">
+          {forecastMonths.map(month => (
+            <div className="dashboard-calendar-box" key={month.key}>
+              <div className="dashboard-calendar-month"><span>{month.label}</span><strong>{money(month.total)}</strong></div>
+              {month.licenses.length === 0 ? (
+                <p className="dashboard-empty">No renewals.</p>
+              ) : (
+                <div className="dashboard-calendar-chips">
+                  {month.licenses.map(license => (
+                    <button
+                      type="button"
+                      className={`dashboard-calendar-chip dashboard-calendar-chip-${costTier(license.price)}`}
+                      key={license.licenseId}
+                      title={`${license.licenseName} — ${money(license.price)}`}
+                    >
+                      <span className="dashboard-calendar-chip-name">{license.licenseName}</span>
+                      <span className="dashboard-calendar-chip-price">{money(license.price)}</span>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
       </section>
     </div>
   )

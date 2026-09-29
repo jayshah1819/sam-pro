@@ -1,9 +1,11 @@
 CREATE TABLE finance_view (
-    finance_view_id INT NOT NULL AUTO_INCREMENT,
+    software_code VARCHAR(100) NOT NULL,
     tenant_id BIGINT NOT NULL,
-    source VARCHAR(255) NULL,
-    budget VARCHAR(255) NULL,
-    software_code VARCHAR(100) NULL,
+    source_budget VARCHAR(255) NULL,
+    primary_category VARCHAR(255) NULL,
+    sub_category VARCHAR(255) NULL,
+    business_criticality VARCHAR(50) NULL,
+    strategy VARCHAR(50) NULL,
     erp VARCHAR(100) NULL,
     cost_code VARCHAR(100) NULL,
     location VARCHAR(255) NULL,
@@ -21,7 +23,8 @@ CREATE TABLE finance_view (
     consulting_outside_services DECIMAL(15,2) NULL,
     total_tco DECIMAL(15,2) NULL,
     cost_recoveries DECIMAL(15,2) NULL,
-    PRIMARY KEY (finance_view_id),
+    PRIMARY KEY (software_code),
     INDEX idx_finance_view_tenant_id (tenant_id),
     INDEX idx_finance_view_vendor_id (vendor_id)
 );
+

@@ -10,12 +10,16 @@ import org.hibernate.annotations.TenantId;
 
 import java.math.BigDecimal;
 
-// Finance rollup row (software cost/TCO view) shown on the Finance tab. Entity + table only for
-// now, no repository/service/controller yet.
+// Finance rollup row (software cost/TCO view) shown on the Finance "Detailed" tab.
+// One software can have several rows here (one per Cost Code line item, e.g. the
+// source "Detailed"/"Other Software" import sheets list the same software against
+// multiple cost codes) — the natural key is (tenant, software_code, cost_code),
+// not software_code alone, so the primary key is a surrogate id.
 @Entity
 @Table(name = "finance_view", indexes = {
         @Index(name = "idx_finance_view_tenant_id", columnList = "tenant_id"),
-        @Index(name = "idx_finance_view_vendor_id", columnList = "vendor_id")
+        @Index(name = "idx_finance_view_vendor_id", columnList = "vendor_id"),
+        @Index(name = "idx_finance_view_software_code", columnList = "software_code")
 })
 @Getter
 @Setter
@@ -24,8 +28,11 @@ public class FinanceView {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
-    @Column(name = "finance_view_id")
-    private Integer id;
+    private Long id;
+
+    // Business key from the source spreadsheet, not unique alone — see class comment.
+    @Column(name = "software_code", nullable = false)
+    private String softwareCode;
 
     @TenantId
     @Setter(AccessLevel.NONE)
@@ -36,14 +43,20 @@ public class FinanceView {
         return tenantId != null ? tenantId : TenantContext.get();
     }
 
-    @Column(name = "source")
-    private String source;
+    @Column(name = "source_budget")
+    private String sourceBudget;
 
-    @Column(name = "budget")
-    private String budget;
+    @Column(name = "primary_category")
+    private String primaryCategory;
 
-    @Column(name = "software_code")
-    private String softwareCode;
+    @Column(name = "sub_category")
+    private String subCategory;
+
+    @Column(name = "business_criticality")
+    private String businessCriticality;
+
+    @Column(name = "strategy")
+    private String strategy;
 
     @Column(name = "erp")
     private String erp;
