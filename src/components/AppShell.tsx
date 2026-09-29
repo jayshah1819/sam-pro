@@ -1,4 +1,5 @@
-import { NavLink, Outlet } from 'react-router-dom'
+import { useEffect, useState } from 'react'
+import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom'
 import { useAuth } from '../context'
 
 interface NavItem {
@@ -16,10 +17,26 @@ const NAV_ITEMS: NavItem[] = [
   { label: 'Users',        path: '/users',        roles: ['ADMIN'] },
 ]
 
+type WorkspaceView = 'procurement' | 'finance'
+
 export default function AppShell() {
   const { user, logout } = useAuth()
   const role = user?.role ?? 'VIEWER'
-  const visibleItems = NAV_ITEMS.filter(item => item.roles.includes(role))
+  const navigate = useNavigate()
+  const location = useLocation()
+  const [view, setView] = useState<WorkspaceView>(() => location.pathname.startsWith('/finance') ? 'finance' : 'procurement')
+
+  // Keep the dropdown in sync if the user lands on /finance directly (e.g. via a bookmark).
+  useEffect(() => {
+    setView(location.pathname.startsWith('/finance') ? 'finance' : 'procurement')
+  }, [location.pathname])
+
+  function handleViewChange(next: WorkspaceView) {
+    setView(next)
+    navigate(next === 'finance' ? '/finance' : '/contracts')
+  }
+
+  const visibleItems = view === 'finance' ? [] : NAV_ITEMS.filter(item => item.roles.includes(role))
 
   return (
     <div className="min-h-screen flex bg-[#f7f6f3]">
@@ -27,6 +44,17 @@ export default function AppShell() {
         <div className="h-14 flex items-center px-4 border-b border-[#e5e4e7] shrink-0">
           <img src="/logo-color.svg" alt="SAM Tracker" className="h-9 w-9 object-contain" />
           <span className="ml-2 text-sm font-semibold text-[#08060d] tracking-tight">SAM Tracker</span>
+        </div>
+        <div className="px-4 py-2 border-b border-[#e5e4e7] shrink-0">
+          <select
+            value={view}
+            onChange={event => handleViewChange(event.target.value as WorkspaceView)}
+            aria-label="Workspace view"
+            className="w-full h-8 px-2 rounded-md border border-[#e5e4e7] text-xs text-[#08060d] bg-white cursor-pointer"
+          >
+            <option value="procurement">Procurement</option>
+            <option value="finance">Finance</option>
+          </select>
         </div>
         <nav className="flex-1 py-2 overflow-y-auto">
           {visibleItems.map(item => (

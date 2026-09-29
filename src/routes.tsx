@@ -9,6 +9,7 @@ import LicensesPage from './pages/LicensesPage'
 import DashboardPage from './pages/DashboardPage'
 import DepartmentsPage from './pages/DepartmentsPage'
 import UsersPage from './pages/UsersPage'
+import FinancePage from './pages/FinancePage'
 import RequireRole from './components/RequireRole'
 
 export const router = createBrowserRouter([
@@ -30,6 +31,7 @@ export const router = createBrowserRouter([
           { path: '/vendors', element: <VendorsPage /> },
           { path: '/licenses', element: <LicensesPage /> },
           { path: '/departments', element: <DepartmentsPage /> },
+          { path: '/finance', element: <FinancePage /> },
           {
             element: <RequireRole roles={['ADMIN']} />,
             children: [{ path: '/users', element: <UsersPage /> }],
