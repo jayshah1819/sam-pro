@@ -189,4 +189,7 @@ public class Entitlement {
 
     @Column(name = "description", columnDefinition = "text")
     private String description;
+
+    @Column(name = "box_link")
+    private String boxLink;
 }

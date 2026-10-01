@@ -54,5 +54,6 @@ public record CreateContractLicenseRequest(
                 String paymentSchedule,
                 String currency,
                 String criticalityLevels,
-                String description) {
+                String description,
+                String boxLink) {
 }

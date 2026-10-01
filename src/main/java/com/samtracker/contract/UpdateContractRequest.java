@@ -17,5 +17,6 @@ public record UpdateContractRequest(
                 @NotNull LocalDate startDate,
                 @NotNull LocalDate endDate,
                 ContractStatus status,
-                BigDecimal value) {
+                BigDecimal value,
+                String boxLink) {
 }

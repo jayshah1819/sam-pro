@@ -49,7 +49,7 @@ public class ContractService {
                    e.number_of_licenses_owned, e.proposed_function_group_owner, e.billing_vendor,
                    e.billing_vendor_id, e.business_function, e.number_of_users, e.budget_owner,
                    e.primary_it_group, e.primary_it_group_leadership, e.contract_duration,
-                   e.payment_schedule, e.currency, e.criticality_levels, e.description
+                   e.payment_schedule, e.currency, e.criticality_levels, e.description, e.box_link
             FROM entitlements e
             JOIN software_products s ON s.software_id = e.software_id AND s.tenant_id = e.tenant_id
             LEFT JOIN contracts c ON c.contract_id = e.contract_id AND c.tenant_id = e.tenant_id
@@ -230,8 +230,8 @@ public class ContractService {
         jdbcTemplate.update(
                 """
                         INSERT INTO contracts (tenant_id, vendor_id, vendor_name, vendor_jde_number, contract_number,
-                            location, it_owner, business_owner, comments, software_name, start_date, end_date, status, value)
-                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                            location, it_owner, business_owner, comments, software_name, start_date, end_date, status, value, box_link)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                         """,
                 tenantId,
                 vendor.getVendorId(),
@@ -246,7 +246,8 @@ public class ContractService {
                 request.startDate(),
                 request.endDate(),
                 (request.status() == null ? ContractStatus.ACTIVE : request.status()).name(),
-                request.value());
+                request.value(),
+                request.boxLink() == null ? null : request.boxLink().strip());
 
         Integer contractId = jdbcTemplate.queryForObject(
                 "SELECT contract_id FROM contracts WHERE tenant_id = ? ORDER BY contract_id DESC LIMIT 1",
@@ -287,6 +288,7 @@ public class ContractService {
         contract.setEndDate(request.endDate());
         contract.setStatus(request.status() == null ? ContractStatus.ACTIVE : request.status());
         contract.setValue(request.value());
+        contract.setBoxLink(request.boxLink() == null ? null : request.boxLink().strip());
         Contract saved = contractRepository.save(contract);
         if (request.licenses() != null) {
             request.licenses().forEach(license -> addLicense(saved.getId(), license));
@@ -311,7 +313,7 @@ public class ContractService {
         int updated = jdbcTemplate.update(
                 """
                                         UPDATE contracts
-                        SET vendor_id = ?, vendor_name = ?, vendor_jde_number = ?, contract_number = ?, location = ?, software_name = ?, start_date = ?, end_date = ?, status = ?, value = ?
+                        SET vendor_id = ?, vendor_name = ?, vendor_jde_number = ?, contract_number = ?, location = ?, software_name = ?, start_date = ?, end_date = ?, status = ?, value = ?, box_link = ?
                                         WHERE contract_id = ? AND tenant_id = ?
                                         """,
                 vendor.getVendorId(),
@@ -324,6 +326,7 @@ public class ContractService {
                 request.endDate(),
                 (request.status() == null ? ContractStatus.ACTIVE : request.status()).name(),
                 request.value(),
+                request.boxLink() == null ? null : request.boxLink().strip(),
                 id,
                 tenantId);
         if (updated == 0) {
@@ -364,6 +367,7 @@ public class ContractService {
         contract.setEndDate(request.endDate());
         contract.setStatus(request.status() == null ? ContractStatus.ACTIVE : request.status());
         contract.setValue(request.value());
+        contract.setBoxLink(request.boxLink() == null ? null : request.boxLink().strip());
         Contract saved = contractRepository.save(contract);
         syncContractLicenseDates(id, tenantId, saved.getStartDate(), saved.getEndDate());
         attachVendorSnapshot(saved);
@@ -1216,7 +1220,8 @@ public class ContractService {
                 rs.getString("payment_schedule"),
                 rs.getString("currency"),
                 rs.getString("criticality_levels"),
-                rs.getString("description"));
+                rs.getString("description"),
+                rs.getString("box_link"));
     }
 
     private SoftwareProduct findOrCreateSoftware(Long tenantId, String softwareName, String vendorName,
@@ -1287,7 +1292,8 @@ public class ContractService {
                 entitlement.getPaymentSchedule(),
                 entitlement.getCurrency(),
                 entitlement.getCriticalityLevels(),
-                entitlement.getDescription());
+                entitlement.getDescription(),
+                entitlement.getBoxLink());
     }
 
     // Applies the ~30 descriptive/budget columns shared by every create/update
@@ -1323,6 +1329,7 @@ public class ContractService {
         entitlement.setCurrency(blankToNull(request.currency()));
         entitlement.setCriticalityLevels(blankToNull(request.criticalityLevels()));
         entitlement.setDescription(blankToNull(request.description()));
+        entitlement.setBoxLink(blankToNull(request.boxLink()));
     }
 
     private void applyExtendedFields(Entitlement entitlement, UpdateContractLicenseRequest request) {
@@ -1355,6 +1362,7 @@ public class ContractService {
         entitlement.setCurrency(blankToNull(request.currency()));
         entitlement.setCriticalityLevels(blankToNull(request.criticalityLevels()));
         entitlement.setDescription(blankToNull(request.description()));
+        entitlement.setBoxLink(blankToNull(request.boxLink()));
     }
 
     private String blankToNull(String value) {
@@ -1385,7 +1393,7 @@ public class ContractService {
                 blankToNull(request.primaryItGroup()), blankToNull(request.primaryItGroupLeadership()),
                 blankToNull(request.contractDuration()), blankToNull(request.paymentSchedule()),
                 blankToNull(request.currency()), blankToNull(request.criticalityLevels()),
-                blankToNull(request.description()) };
+                blankToNull(request.description()), blankToNull(request.boxLink()) };
     }
 
     private Object[] extendedFieldValues(UpdateContractLicenseRequest request) {
@@ -1403,7 +1411,7 @@ public class ContractService {
                 blankToNull(request.primaryItGroup()), blankToNull(request.primaryItGroupLeadership()),
                 blankToNull(request.contractDuration()), blankToNull(request.paymentSchedule()),
                 blankToNull(request.currency()), blankToNull(request.criticalityLevels()),
-                blankToNull(request.description()) };
+                blankToNull(request.description()), blankToNull(request.boxLink()) };
     }
 
     private static final String EXTENDED_LICENSE_INSERT_COLUMNS = """
@@ -1412,10 +1420,10 @@ public class ContractService {
             annual_infrastructure_cost, annual_cost_non_license, annual_license_cost, annual_cost_total, acs_budget,
             number_of_active_users, number_of_licenses_owned, proposed_function_group_owner, billing_vendor,
             billing_vendor_id, business_function, number_of_users, budget_owner, primary_it_group,
-            primary_it_group_leadership, contract_duration, payment_schedule, currency, criticality_levels, description
+            primary_it_group_leadership, contract_duration, payment_schedule, currency, criticality_levels, description, box_link
             """;
 
-    private static final String EXTENDED_LICENSE_INSERT_PLACEHOLDERS = "?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?";
+    private static final String EXTENDED_LICENSE_INSERT_PLACEHOLDERS = "?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?";
 
     private static final String EXTENDED_LICENSE_UPDATE_ASSIGNMENTS = """
             software_code = ?, functional_grouping = ?, functional_owner = ?, confidence_level = ?, manufacturer_name = ?,
@@ -1423,7 +1431,7 @@ public class ContractService {
             annual_infrastructure_cost = ?, annual_cost_non_license = ?, annual_license_cost = ?, annual_cost_total = ?, acs_budget = ?,
             number_of_active_users = ?, number_of_licenses_owned = ?, proposed_function_group_owner = ?, billing_vendor = ?,
             billing_vendor_id = ?, business_function = ?, number_of_users = ?, budget_owner = ?, primary_it_group = ?,
-            primary_it_group_leadership = ?, contract_duration = ?, payment_schedule = ?, currency = ?, criticality_levels = ?, description = ?
+            primary_it_group_leadership = ?, contract_duration = ?, payment_schedule = ?, currency = ?, criticality_levels = ?, description = ?, box_link = ?
             """;
 
     private <T> T runInTenant(Long tenantId, Supplier<T> action) {
@@ -1450,7 +1458,7 @@ public class ContractService {
 
     private List<Contract> fetchContractsForAdmin(Integer contractId) {
         String sql = """
-                    SELECT c.contract_id, c.tenant_id, c.contract_number, c.location, c.it_owner, c.business_owner, c.start_date, c.end_date, c.status, c.value,
+                    SELECT c.contract_id, c.tenant_id, c.contract_number, c.location, c.it_owner, c.business_owner, c.start_date, c.end_date, c.status, c.value, c.box_link,
                                         c.vendor_id AS contract_vendor_id, c.vendor_name, c.vendor_jde_number, c.software_name,
                                     v.name AS vendor_entity_name, v.vendor_id AS vendor_display_id, v.vendor_jde_number AS vendor_entity_jde_number, v.canonical_name, v.contact_email, v.website
                     FROM contracts c
@@ -1487,6 +1495,7 @@ public class ContractService {
         contract.setEndDate(rs.getObject("end_date", LocalDate.class));
         contract.setStatus(parseStatus(rs.getString("status")));
         contract.setValue(rs.getBigDecimal("value"));
+        contract.setBoxLink(rs.getString("box_link"));
 
         Integer vendorDisplayId = (Integer) rs.getObject("vendor_display_id");
         if (vendorDisplayId == null) {

@@ -60,6 +60,7 @@ type LicenseForm = {
   currency: string
   criticalityLevels: string
   description: string
+  boxLink: string
 }
 
 const EMPTY_FORM: LicenseForm = {
@@ -70,7 +71,7 @@ const EMPTY_FORM: LicenseForm = {
   annualCostNonLicense: '', annualLicenseCost: '', annualCostTotal: '', acsBudget: '', numberOfActiveUsers: '',
   numberOfLicensesOwned: '', proposedFunctionGroupOwner: '', billingVendor: '', billingVendorId: '', businessFunction: '',
   numberOfUsers: '', budgetOwner: '', primaryItGroup: '', primaryItGroupLeadership: '', contractDuration: '',
-  paymentSchedule: '', currency: '', criticalityLevels: '', description: '',
+  paymentSchedule: '', currency: '', criticalityLevels: '', description: '', boxLink: '',
 }
 
 export default function LicensesPage() {
@@ -202,6 +203,7 @@ export default function LicensesPage() {
       Currency: license.currency ?? '',
       'Criticality levels': license.criticalityLevels ?? '',
       Description: license.description ?? '',
+      'Box link': license.boxLink ?? '',
     })))
   }
 
@@ -272,6 +274,7 @@ export default function LicensesPage() {
         currency: form.currency.trim() || null,
         criticalityLevels: form.criticalityLevels.trim() || null,
         description: form.description.trim() || null,
+        boxLink: form.boxLink.trim() || null,
       }
       const { data } = editingLicenseId == null
         ? await client.post<ContractLicense>(`/vendors/${form.vendorId}/licenses`, payload)
@@ -362,6 +365,7 @@ export default function LicensesPage() {
       currency: license.currency ?? '',
       criticalityLevels: license.criticalityLevels ?? '',
       description: license.description ?? '',
+      boxLink: license.boxLink ?? '',
     })
     setAddOpen(true)
   }
@@ -477,6 +481,7 @@ export default function LicensesPage() {
                 <input type="date" required value={form.startDate} onChange={event => setForm(previous => ({ ...previous, startDate: event.target.value }))} onFocus={event => event.currentTarget.showPicker?.()} />
                 <input type="date" required value={form.expiryDate} onChange={event => setForm(previous => ({ ...previous, expiryDate: event.target.value }))} onFocus={event => event.currentTarget.showPicker?.()} />
                 <textarea placeholder="Comments" rows={3} value={form.comments} onChange={event => setForm(previous => ({ ...previous, comments: event.target.value }))} className="contracts-comments-field" />
+                <input type="url" placeholder="Box link (optional)" value={form.boxLink} onChange={event => setForm(previous => ({ ...previous, boxLink: event.target.value }))} />
                 <fieldset className="license-extended-fields">
                   <legend>Additional details</legend>
                   <input placeholder="Software code (auto-set from Software ID after save)" value={form.softwareCode} disabled title="Automatically set to the software's ID so it always links to Finance; not editable." />
@@ -566,6 +571,7 @@ export default function LicensesPage() {
                   <th>Currency</th>
                   <th>Criticality levels</th>
                   <th>Description</th>
+                  <th>Box link</th>
                   <th>Actions</th>
                 </tr>
               </thead>
@@ -630,11 +636,12 @@ export default function LicensesPage() {
                     <td>{license.currency || '—'}</td>
                     <td>{license.criticalityLevels || '—'}</td>
                     <td className="license-description-cell">{license.description || '—'}</td>
+                    <td>{license.boxLink ? <a href={license.boxLink} target="_blank" rel="noreferrer">Box link</a> : '—'}</td>
                     <td><button type="button" className="license-edit-button" onClick={() => editLicense(license)}>Edit</button></td>
                   </tr>
                 ))}
                 {visibleLicenses.length === 0 && (
-                  <tr><td colSpan={44} className="py-10 text-center text-[#6b6375]">No licenses found.</td></tr>
+                  <tr><td colSpan={45} className="py-10 text-center text-[#6b6375]">No licenses found.</td></tr>
                 )}
               </tbody>
             </table> : <table className="contracts-table licenses-table">

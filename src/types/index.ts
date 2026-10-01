@@ -87,6 +87,7 @@ export interface Contract {
   endDate: string
   status: 'ACTIVE' | 'EXPIRED' | 'PENDING_RENEWAL'
   value: number | null
+  boxLink: string | null
 }
 
 export interface ContractLicense {
@@ -139,6 +140,7 @@ export interface ContractLicense {
   currency: string | null
   criticalityLevels: string | null
   description: string | null
+  boxLink: string | null
 }
 
 export interface AppData {

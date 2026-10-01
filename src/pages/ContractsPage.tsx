@@ -54,6 +54,7 @@ type ContractForm = {
   endDate: string
   status: Contract['status']
   value: string
+  boxLink: string
 }
 
 type LicenseForm = {
@@ -87,6 +88,7 @@ const EMPTY_FORM: ContractForm = {
   endDate: '',
   status: 'ACTIVE',
   value: '',
+  boxLink: '',
 }
 
 const EMPTY_LICENSE_FORM: LicenseForm = {
@@ -246,6 +248,7 @@ export default function ContractsPage() {
         endDate: addForm.endDate,
         status: addForm.status,
         value: addForm.value.trim() ? Number(addForm.value) : null,
+        boxLink: addForm.boxLink.trim() || null,
       })
       markNew(createdContract.id)
       setAddForm(EMPTY_FORM)
@@ -280,6 +283,7 @@ export default function ContractsPage() {
       endDate: c.endDate,
       status: c.status,
       value: c.value == null ? '' : String(c.value),
+      boxLink: c.boxLink ?? '',
     })
     setSaveError(null)
   }
@@ -320,6 +324,7 @@ export default function ContractsPage() {
         endDate: editForm.endDate,
         status: editForm.status,
         value: editForm.value.trim() ? Number(editForm.value) : null,
+        boxLink: editForm.boxLink.trim() || null,
       })
       cancelEdit()
       setReloadTick(t => t + 1)
@@ -734,6 +739,10 @@ export default function ContractsPage() {
                         <span>Comments</span>
                         <textarea value={addForm.comments} onChange={e => setAddForm(f => ({ ...f, comments: e.target.value }))} placeholder="Optional" rows={3} className="contracts-comments-field" />
                       </label>
+                      <label className="contracts-field">
+                        <span>Box link</span>
+                        <input type="url" value={addForm.boxLink} onChange={e => setAddForm(f => ({ ...f, boxLink: e.target.value }))} placeholder="Optional" />
+                      </label>
                     </section>
                   </div>
 
@@ -931,13 +940,22 @@ export default function ContractsPage() {
                               rows={2}
                             />
                           </label>
+                          <label className="contract-edit-notes-label">
+                            <span>Box link</span>
+                            <input
+                              type="url"
+                              value={editForm.boxLink}
+                              onChange={e => setEditForm(f => ({ ...f, boxLink: e.target.value }))}
+                              placeholder="Optional"
+                            />
+                          </label>
                         </td>
                       </tr>
                     </Fragment>
                   ) : (
                     <Fragment key={c.id}>
                       <tr className={`contract-row${newContractIds.has(c.id) ? ' contract-row-new' : ''}`}>
-                        <td><div className="contract-number">{c.contractNumber}</div><div className="contract-subtitle">{c.location || 'Contract'}</div></td>
+                        <td><div className="contract-number">{c.contractNumber}</div><div className="contract-subtitle">{c.location || 'Contract'}</div>{c.boxLink && <a href={c.boxLink} target="_blank" rel="noreferrer" className="contract-subtitle">Box link</a>}</td>
                         <td className="px-4 py-3 text-[#08060d]">{c.vendorName ?? c.vendor.name}</td>
                         <td className="px-4 py-3 text-[#6b6375]">{c.vendorJDENumber || c.vendor.vendorJDENumber || '—'}</td>
                         <td className="px-4 py-3">

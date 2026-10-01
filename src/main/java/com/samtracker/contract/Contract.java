@@ -90,4 +90,7 @@ public class Contract {
 
     @Column(precision = 15, scale = 2)
     private BigDecimal value;
+
+    @Column(name = "box_link")
+    private String boxLink;
 }

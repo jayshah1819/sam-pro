@@ -54,5 +54,6 @@ public record UpdateContractLicenseRequest(
         String paymentSchedule,
         String currency,
         String criticalityLevels,
-        String description) {
+        String description,
+        String boxLink) {
 }

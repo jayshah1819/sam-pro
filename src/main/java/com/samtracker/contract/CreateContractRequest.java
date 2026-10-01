@@ -20,5 +20,6 @@ public record CreateContractRequest(
         @NotNull LocalDate endDate,
         ContractStatus status,
         BigDecimal value,
+        String boxLink,
         List<@Valid CreateContractLicenseRequest> licenses) {
 }
