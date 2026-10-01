@@ -219,6 +219,10 @@ export default function LicensesPage() {
 
   async function addLicense(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
+    if (!form.vendorId) {
+      setError('Select a vendor before saving this license.')
+      return
+    }
     setSaving(true)
     setError(null)
     try {
