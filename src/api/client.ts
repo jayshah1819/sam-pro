@@ -50,10 +50,6 @@ client.interceptors.response.use(
   },
   error => {
     const requestUrl = String(error?.config?.url || '')
-    const isImportedDataRoute =
-      requestUrl.includes('/vendors/imported') ||
-      requestUrl.includes('/contracts/imported')
-    const isDashboardRoute = requestUrl.includes('/dashboards/me')
     const isLoginRoute = requestUrl.includes('/auth/login')
     const isRegisterRoute = requestUrl.includes('/auth/register')
 
@@ -61,8 +57,6 @@ client.interceptors.response.use(
     if (
       error.response?.status === 401 &&
       window.location.pathname !== '/login' &&
-      !isImportedDataRoute &&
-      !isDashboardRoute &&
       !isLoginRoute &&
       !isRegisterRoute
     ) {

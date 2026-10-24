@@ -4,6 +4,7 @@ env:
   variables:
     AWS_REGION: "us-east-2"
     AWS_ACCOUNT_ID: "353548850592"
+    DEPLOY_INSTANCE_ID: "i-0b5de15b2ab459eb1"
 
 phases:
   pre_build:
@@ -24,6 +25,14 @@ phases:
       - docker push $REPO_URI:$IMAGE_TAG
       - docker push $REPO_URI:latest
       - printf '{"ImageTag":"%s"}' "$IMAGE_TAG" > image_tag.json
+      - echo Deploying to EC2 via SSM...
+      - |
+        CMD_ID=$(aws ssm send-command --region $AWS_REGION --instance-ids $DEPLOY_INSTANCE_ID \
+          --document-name AWS-RunShellScript \
+          --parameters "commands=[\"/opt/sam-tracker/deploy.sh $IMAGE_TAG\"]" \
+          --query Command.CommandId --output text)
+        sleep 5
+        aws ssm wait command-executed --region $AWS_REGION --command-id $CMD_ID --instance-id $DEPLOY_INSTANCE_ID
 
 artifacts:
   files:

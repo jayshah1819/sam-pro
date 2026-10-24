@@ -12,9 +12,6 @@ public class EntityCodeService {
     // Per-entity starting values so each entity type's numbering range is distinct
     private static final Map<String, Long> START_VALUES = Map.of(
             "user", 100L,
-            "vendor_id", 400L,
-            "software_id", 900L,
-            "license_id", 900L,
             "contract", 200L);
 
     private final EntityCodeCounterRepository counterRepository;

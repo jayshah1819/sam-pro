@@ -191,7 +191,7 @@ export default function DashboardPage() {
         Tier: costTier(license.price),
       })))
     if (rows.length === 0) return
-    downloadExcel('upcoming-license-costs.xlsx', 'Upcoming Costs', rows)
+    void downloadExcel('upcoming-license-costs.xlsx', 'Upcoming Costs', rows)
   }
 
   return (

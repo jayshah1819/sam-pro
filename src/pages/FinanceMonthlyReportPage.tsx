@@ -56,7 +56,7 @@ export default function FinanceMonthlyReportPage() {
   }, [rows])
 
   function exportReport() {
-    downloadExcel(`finance-monthly-actuals-${year}.xlsx`, `${year}`, rows.map(row => {
+    void downloadExcel(`finance-monthly-actuals-${year}.xlsx`, `${year}`, rows.map(row => {
       const out: Record<string, unknown> = {}
       out['Software Code'] = row.softwareCode
       out['Software Name'] = row.softwareName

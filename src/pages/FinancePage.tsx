@@ -309,7 +309,7 @@ export default function FinancePage() {
   }
 
   function exportFinance() {
-    downloadExcel('finance-detailed.xlsx', 'Detailed', filteredRows.map(row => {
+    void downloadExcel('finance-detailed.xlsx', 'Detailed', filteredRows.map(row => {
       const out: Record<string, unknown> = {}
       out['Software Code'] = row.softwareCode
       out['Software Name'] = row.softwareName

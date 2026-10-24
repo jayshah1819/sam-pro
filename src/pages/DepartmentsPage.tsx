@@ -126,7 +126,7 @@ export default function DepartmentsPage() {
   const selectedTotal = selectedLicenses.reduce((sum, license) => sum + (license.price ?? 0), 0)
 
   function exportDeptContracts(node: DepartmentNode) {
-    downloadExcel(`${node.label}-contracts.xlsx`, 'Contracts', node.allContracts.map(contract => ({
+    void downloadExcel(`${node.label}-contracts.xlsx`, 'Contracts', node.allContracts.map(contract => ({
       'Contract #': contract.contractNumber,
       Vendor: contract.vendorName ?? '',
       'IT owner': contract.itOwner ?? '',
@@ -141,7 +141,7 @@ export default function DepartmentsPage() {
   }
 
   function exportDeptLicenses(node: DepartmentNode) {
-    downloadExcel(`${node.label}-licenses.xlsx`, 'Licenses', licensesForNode(node).map(license => ({
+    void downloadExcel(`${node.label}-licenses.xlsx`, 'Licenses', licensesForNode(node).map(license => ({
       'License name': license.licenseName,
       Vendor: license.vendorName,
       'IT owner': license.itOwner ?? '',

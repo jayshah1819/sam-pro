@@ -143,21 +143,25 @@ export default function LicensesPage() {
   const softwareGroups = useMemo(() => {
     const groups = new Map<string, ContractLicense[]>()
     visibleLicenses.forEach(license => {
-      const key = `${license.vendorName}::${license.softwareName}`
+      const key = license.softwareName.trim()
       groups.set(key, [...(groups.get(key) ?? []), license])
     })
-    return Array.from(groups, ([key, group]) => ({
-      key,
-      vendorName: group[0].vendorName,
-      vendor: vendors.find(vendor => vendor.name.toLowerCase() === group[0].vendorName.toLowerCase()),
-      softwareName: group[0].softwareName,
-      licenses: group,
-      totalPrice: group.reduce((sum, license) => sum + (license.price ?? 0), 0),
-    })).sort((a, b) => a.softwareName.localeCompare(b.softwareName))
+    return Array.from(groups, ([key, group]) => {
+      const vendorNames = Array.from(new Set(group.map(license => license.vendorName)))
+      const vendorName = vendorNames.length === 1 ? vendorNames[0] : `${vendorNames.length} vendors`
+      return {
+        key,
+        vendorName,
+        vendor: vendorNames.length === 1 ? vendors.find(vendor => vendor.name.toLowerCase() === vendorNames[0].toLowerCase()) : undefined,
+        softwareName: group[0].softwareName,
+        licenses: group,
+        totalPrice: group.reduce((sum, license) => sum + (license.price ?? 0), 0),
+      }
+    }).sort((a, b) => a.softwareName.localeCompare(b.softwareName))
   }, [visibleLicenses, vendors])
 
   function exportLicenses() {
-    downloadExcel('licenses.xlsx', 'Licenses', visibleLicenses.map(license => ({
+    void downloadExcel('licenses.xlsx', 'Licenses', visibleLicenses.map(license => ({
       'License name': license.licenseName,
       Vendor: license.vendorName,
       'Vendor ID': license.vendorId ?? '',
@@ -661,13 +665,6 @@ export default function LicensesPage() {
                         <td>{new Set(group.licenses.filter(license => license.contractId != null).map(license => license.contractId)).size}</td>
                         <td>{fmtCurrency(group.totalPrice)}</td>
                       </tr>
-                      {isOpen && (
-                        <tr className="software-vendor-detail-row">
-                          <td colSpan={8}>
-                            Vendor details: <strong>{group.vendorName}</strong> · JDE {group.vendor?.vendorJDENumber || '—'} · {group.vendor?.contactEmail || '—'} · {group.vendor?.address || '—'} · {group.vendor?.website || '—'}
-                          </td>
-                        </tr>
-                      )}
                       {isOpen && group.licenses.map(license => (
                         <tr key={`${group.key}-${license.licenseId}`} className="software-license-detail-row">
                           <td colSpan={8}>

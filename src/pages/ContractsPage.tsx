@@ -496,7 +496,7 @@ export default function ContractsPage() {
   const total = visibleContracts.reduce((sum, c) => sum + (c.value ?? 0), 0)
 
   async function exportContracts() {
-    downloadExcel('contracts.xlsx', 'Contracts', visibleContracts.map(contract => ({
+    void downloadExcel('contracts.xlsx', 'Contracts', visibleContracts.map(contract => ({
       'Contract #': contract.contractNumber,
       Vendor: contract.vendorName ?? contract.vendor?.name ?? '',
       'Vendor JDE': contract.vendorJDENumber ?? contract.vendor?.vendorJDENumber ?? '',
@@ -517,8 +517,8 @@ export default function ContractsPage() {
 
   return (
     <div className="contracts-preview flex flex-col gap-4">
-      <div className="flex items-baseline justify-between">
-        <h1 className="text-lg font-semibold text-[#08060d]">Contracts</h1>
+      <div className="flex items-center justify-between">
+        <h1 className="text-xl font-semibold tracking-tight text-[#08060d]">Contracts</h1>
         <div className="flex items-center gap-3"><button type="button" className="contracts-clear-button" onClick={() => void exportContracts()}>Export Excel</button><span className="text-sm text-[#6b6375]">
           Page total: <span className="font-semibold text-[#08060d]">{fmtCurrency(total)}</span>
         </span></div>
@@ -530,7 +530,7 @@ export default function ContractsPage() {
             value={search}
             onChange={e => handleSearchChange(e.target.value)}
             placeholder="Search contracts, licenses, software, or JDE"
-            className="h-8 min-w-72 px-3 rounded-md border border-[#e5e4e7] text-sm text-[#08060d] outline-none focus:border-[#aa3bff]"
+            className="contracts-search-input"
           />
           <button type="button" className="contracts-add-button" onClick={() => { setSaveError(null); setAddModalOpen(true) }}>
             + Add contract

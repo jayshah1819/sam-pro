@@ -177,7 +177,7 @@ export default function LoginPage() {
             <button
               type="submit"
               disabled={loading}
-              className="h-10 mt-1 rounded-lg bg-[#08060d] text-white text-sm font-medium hover:bg-[#2a2735] disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+              className="h-10 mt-1 rounded-lg bg-[#0f766e] text-white text-sm font-medium hover:bg-[#115e59] disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
             >
               {loading
                 ? (mode === 'login' ? 'Signing in…' : 'Creating account…')

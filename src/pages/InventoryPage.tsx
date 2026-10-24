@@ -155,7 +155,7 @@ export default function InventoryPage() {
   }
 
   function exportInventory() {
-    downloadExcel('inventory.xlsx', 'Inventory', filteredRows.map(row => {
+    void downloadExcel('inventory.xlsx', 'Inventory', filteredRows.map(row => {
       const out: Record<string, unknown> = {}
       for (const column of COLUMNS) out[column.label] = row[column.key]
       return out

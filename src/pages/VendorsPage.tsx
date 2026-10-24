@@ -288,7 +288,7 @@ export default function VendorsPage() {
   const grandTotal = insights.reduce((sum, r) => sum + r.totalBudget, 0)
 
   function exportVendors() {
-    downloadExcel('vendors.xlsx', 'Vendors', insights.map(vendor => ({
+    void downloadExcel('vendors.xlsx', 'Vendors', insights.map(vendor => ({
       Vendor: vendor.vendorName,
       'Vendor JDE': vendor.vendorJDENumber ?? '',
       'Contact email': vendor.vendorContactEmail ?? '',
