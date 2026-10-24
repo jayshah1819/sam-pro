@@ -29,12 +29,13 @@ public class FinanceInventoryBackfillRunner implements ApplicationRunner {
         jdbcTemplate.update(
                 """
                         INSERT INTO inventory_item (tenant_id, software_code, software_name, total_software_spend)
-                        SELECT fv.tenant_id, fv.software_code, fv.software_name, fv.software_spend
+                        SELECT fv.tenant_id, fv.software_code, MAX(fv.software_name), SUM(fv.software_spend)
                         FROM finance_view fv
                         WHERE NOT EXISTS (
                             SELECT 1 FROM inventory_item ii
                             WHERE ii.tenant_id = fv.tenant_id AND ii.software_code = fv.software_code
                         )
+                        GROUP BY fv.tenant_id, fv.software_code
                         """);
     }
 }
