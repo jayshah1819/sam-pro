@@ -1,8 +1,6 @@
 package com.samtracker.security;
 
 import com.samtracker.auth.CredentialDetailsService;
-import com.samtracker.connector.ConnectorApiKeyFilter;
-import org.springframework.beans.factory.annotation.Value;
 import com.samtracker.tenant.TenantFilter;
 import jakarta.servlet.DispatcherType;
 import jakarta.servlet.http.HttpServletResponse;
@@ -60,9 +58,7 @@ public class SecurityConfig {
     }
 
     @Bean
-    public SecurityFilterChain filterChain(HttpSecurity http,
-            @Value("${app.integration.api-key:}") String integrationApiKey,
-            @Value("${app.integration.tenant-id:1}") Long integrationTenantId) throws Exception {
+    public SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
         http
                 .cors(Customizer.withDefaults())
                 .csrf(csrf -> csrf.disable())
@@ -80,8 +76,6 @@ public class SecurityConfig {
                 .exceptionHandling(ex -> ex
                         .authenticationEntryPoint(
                                 (req, res, e) -> res.sendError(HttpServletResponse.SC_UNAUTHORIZED, "Unauthorized")))
-                .addFilterBefore(new ConnectorApiKeyFilter(integrationApiKey, integrationTenantId),
-                        UsernamePasswordAuthenticationFilter.class)
                 .addFilterBefore(jwtAuthFilter, UsernamePasswordAuthenticationFilter.class)
                 .addFilterAfter(new TenantFilter(jwtService), JwtAuthenticationFilter.class);
         return http.build();
